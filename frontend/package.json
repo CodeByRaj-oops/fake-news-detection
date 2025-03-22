@@ -18,11 +18,15 @@
   "scripts": {
     "start": "react-scripts start",
     "dev": "react-scripts start",
+    "predev": "node src/utils/checkRouters.js",
+    "prestart": "node src/utils/checkRouters.js",
     "dev:vite": "vite",
     "build": "react-scripts build",
+    "prebuild": "node src/utils/checkRouters.js",
     "build:vite": "vite build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "check:routers": "node src/utils/checkRouters.js"
   },
   "eslintConfig": {
     "extends": [

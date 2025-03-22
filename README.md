@@ -1,6 +1,131 @@
 # Fake News Detection System
 
-A web application for analyzing and detecting fake news articles and social media posts using advanced machine learning techniques.
+A comprehensive web application for detecting fake news using machine learning with LIME and SHAP explanations.
+
+## 🛠 Error Fix: "No response received from the server"
+
+This update addresses the "No response received from the server" error by implementing several robust solutions:
+
+### 🔄 Backend Improvements
+
+1. **Auto-Restart Capability**: Added `start-backend.ps1` script that automatically:
+   - Verifies Python installation
+   - Installs missing dependencies
+   - Creates required directories
+   - Automatically restarts the server up to 5 times if it crashes
+
+2. **Health Check Endpoint**: Added `/health` endpoint to the FastAPI backend that:
+   - Returns server status and system metrics
+   - Can be used to verify if the backend is running
+
+3. **System Monitoring**: Added `psutil` to monitor system resources.
+
+### 🔄 Frontend Improvements
+
+1. **Enhanced API Service**: Updated `newsApi.js` with robust error handling:
+   - Added automatic retry logic with exponential backoff
+   - Implemented configurable timeouts
+   - Improved error messages with detailed diagnostics
+
+2. **Error Boundary Component**: Implemented React Error Boundary that:
+   - Catches API errors and prevents app crashes
+   - Displays user-friendly error messages
+   - Periodically checks server availability
+   - Allows users to retry failed requests
+
+3. **Better Error Classification**: Categorizes errors as:
+   - Network errors (server unreachable)
+   - Server errors (5xx responses)
+   - Client errors (4xx responses)
+   - Timeout errors
+
+### 🚀 Run Scripts
+
+For simplicity, this project includes several ways to run the application:
+
+#### 1. Comprehensive Solution (Recommended)
+
+```powershell
+.\run-both.ps1
+```
+
+This script:
+- Starts both backend and frontend servers
+- Monitors for crashes and restarts automatically
+- Opens the app in your browser
+- Gracefully handles shutdown
+
+#### 2. Individual Servers
+
+**Backend Only:**
+```powershell
+.\backend\start-backend.ps1
+```
+
+**Frontend Only:**
+```
+.\npm-dev.cmd
+```
+
+## Quick Start
+
+### Option 1: All-in-One Script (Recommended)
+To start both the backend and frontend servers with automatic monitoring and error handling:
+
+```
+powershell -ExecutionPolicy Bypass -File run-all.ps1
+```
+
+This script will:
+1. Start both backend and frontend servers
+2. Monitor their health
+3. Auto-restart if either server crashes
+4. Open your browser to the application
+5. Provide detailed status updates in the console
+
+### Option 2: Start Services Separately
+
+## 🏗 Project Structure
+
+```
+├── backend/                    # FastAPI backend with ML model
+│   ├── app_new.py              # Main FastAPI application
+│   ├── improved_predict.py     # Fake news detection model
+│   ├── requirements.txt        # Backend dependencies
+│   ├── start-backend.ps1       # Backend starter script
+│   └── utils/
+│       └── explainers.py       # LIME and SHAP explanation tools
+├── frontend/                   # React frontend
+│   ├── src/
+│   │   ├── api/
+│   │   │   └── newsApi.js      # Enhanced API service
+│   │   ├── components/
+│   │   │   └── ErrorBoundary.js # Error handling component
+│   │   └── App.js              # Main React component
+│   └── package.json            # Frontend dependencies
+├── run-both.ps1                # Script to run both servers
+├── npm-dev.cmd                 # Command to run frontend
+└── README.md                   # Documentation
+```
+
+## ⚙️ Dependencies
+
+- Backend: Python 3.8+, FastAPI, scikit-learn, LIME, SHAP
+- Frontend: React, Axios, TailwindCSS
+
+## 🔍 Troubleshooting
+
+If you still encounter connection issues:
+
+1. **Check server status**: Visit `http://localhost:8000/health` to verify backend status
+2. **Verify ports**: Ensure ports 8000 (backend) and 3000 (frontend) are available
+3. **Check firewall**: Allow the application through your firewall
+4. **Network issues**: Verify your network connection
+5. **Try restarting**: Run `.\run-both.ps1` again to restart both servers
+
+## 💡 Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## Project Overview
 

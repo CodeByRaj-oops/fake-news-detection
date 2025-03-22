@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useAnalysis } from '../contexts/AnalysisContext';
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
 
 function TextAnalysisForm() {
-  const { analyzeText, isAnalyzing } = useAnalysis();
+  const { analyzeText, isAnalyzing, explanationMethods } = useAnalysis();
   const [text, setText] = useState('');
   const [detailed, setDetailed] = useState(true);
   const [saveReport, setSaveReport] = useState(false);
+  const [explain, setExplain] = useState(false);
+  const [explanationMethod, setExplanationMethod] = useState('lime');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -17,8 +20,8 @@ function TextAnalysisForm() {
       return;
     }
     
-    if (text.trim().length < 10) {
-      setError('Text is too short. Please enter at least 10 characters.');
+    if (text.trim().length < 50) {
+      setError('Text is too short. Please enter at least 50 characters for meaningful analysis.');
       return;
     }
     
@@ -26,7 +29,7 @@ function TextAnalysisForm() {
     
     // Submit analysis request
     try {
-      await analyzeText(text, detailed, saveReport);
+      await analyzeText(text, detailed, saveReport, explain, explanationMethod, 10);
     } catch (err) {
       setError(err.message || 'An error occurred during analysis');
     }
@@ -55,43 +58,102 @@ function TextAnalysisForm() {
         )}
         
         <p className="mt-2 text-sm text-gray-500">
-          For best results, enter complete paragraphs or full articles.
+          For best results, enter complete paragraphs or full articles (minimum 50 characters).
         </p>
       </div>
 
       {/* Analysis options */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex items-center">
-          <input
-            id="detailed-analysis"
-            name="detailed-analysis"
-            type="checkbox"
-            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            checked={detailed}
-            onChange={(e) => setDetailed(e.target.checked)}
-            disabled={isAnalyzing}
-          />
-          <label htmlFor="detailed-analysis" className="ml-2 text-sm text-gray-700">
-            Detailed analysis
-          </label>
-        </div>
+      <div className="bg-gray-50 p-4 rounded-md border">
+        <h3 className="text-md font-medium mb-3">Analysis Options</h3>
         
-        <div className="flex items-center">
-          <input
-            id="save-report"
-            name="save-report"
-            type="checkbox"
-            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            checked={saveReport}
-            onChange={(e) => setSaveReport(e.target.checked)}
-            disabled={isAnalyzing || !detailed}
-          />
-          <label 
-            htmlFor="save-report" 
-            className={`ml-2 text-sm ${detailed ? 'text-gray-700' : 'text-gray-400'}`}
-          >
-            Save report
-          </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <div className="flex items-center">
+              <input
+                id="detailed-analysis"
+                name="detailed-analysis"
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                checked={detailed}
+                onChange={(e) => {
+                  setDetailed(e.target.checked);
+                  // If detailed is turned off, disable save report
+                  if (!e.target.checked) {
+                    setSaveReport(false);
+                  }
+                }}
+                disabled={isAnalyzing}
+              />
+              <label htmlFor="detailed-analysis" className="ml-2 text-sm text-gray-700">
+                Detailed analysis
+              </label>
+            </div>
+            
+            <div className="flex items-center">
+              <input
+                id="save-report"
+                name="save-report"
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                checked={saveReport}
+                onChange={(e) => setSaveReport(e.target.checked)}
+                disabled={isAnalyzing || !detailed}
+              />
+              <label 
+                htmlFor="save-report" 
+                className={`ml-2 text-sm ${detailed ? 'text-gray-700' : 'text-gray-400'}`}
+              >
+                Save report
+              </label>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            <div className="flex items-center">
+              <input
+                id="model-explanations"
+                name="model-explanations"
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                checked={explain}
+                onChange={(e) => setExplain(e.target.checked)}
+                disabled={isAnalyzing}
+              />
+              <label htmlFor="model-explanations" className="ml-2 text-sm text-gray-700">
+                Include model explanations
+              </label>
+              <div className="ml-1 group relative">
+                <InformationCircleIcon className="h-4 w-4 text-gray-400" />
+                <div className="hidden group-hover:block absolute z-10 w-64 p-2 bg-white shadow-lg rounded text-xs text-gray-600 -left-8 -top-24">
+                  Model explanations show which words and phrases most influenced the prediction, using techniques like LIME and SHAP.
+                </div>
+              </div>
+            </div>
+            
+            {explain && (
+              <div>
+                <label htmlFor="explanation-method" className="block text-sm text-gray-700 mb-1">
+                  Explanation method
+                </label>
+                <select
+                  id="explanation-method"
+                  className="form-select text-sm"
+                  value={explanationMethod}
+                  onChange={(e) => setExplanationMethod(e.target.value)}
+                  disabled={isAnalyzing || !explain}
+                >
+                  {explanationMethods.map(method => (
+                    <option key={method.id} value={method.id}>
+                      {method.name} - {method.description}
+                    </option>
+                  ))}
+                  {explanationMethods.length === 0 && (
+                    <option value="lime">LIME - Local explanations</option>
+                  )}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

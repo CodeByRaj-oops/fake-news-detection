@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Fake News Detection System",
   "scripts": {
+    "dev": "cd frontend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "start:backend": "cd backend && python app_new.py",
     "start": "concurrently \"npm run dev:frontend\" \"npm run start:backend\"",

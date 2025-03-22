@@ -28,6 +28,20 @@ from utils.improved_text_processor import (
     get_ngram_frequencies
 )
 
+# Import explainer utilities (new)
+try:
+    from utils.explainers import (
+        ModelExplainer,
+        explain_with_lime,
+        explain_with_shap,
+        get_combined_explanation
+    )
+    EXPLAINERS_AVAILABLE = True
+except ImportError:
+    # If explainers aren't available, we'll still function but without explanations
+    EXPLAINERS_AVAILABLE = False
+    logging.warning("Explainer modules (LIME/SHAP) not available. Install with: pip install lime shap")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -97,17 +111,27 @@ class ImprovedFakeNewsDetector:
             logger.info(f"Loading model from {model_path}")
             self.model = joblib.load(model_path)
             logger.info("Model loaded successfully")
+            
+            # Initialize explainer if available
+            self.explainer = None
+            if EXPLAINERS_AVAILABLE:
+                self.explainer = ModelExplainer(self.model)
+                logger.info("Model explainer initialized")
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             self.model = None
+            self.explainer = None
             
-    def predict(self, text, detailed=False):
+    def predict(self, text, detailed=False, explain=False, explanation_method="lime", num_features=10):
         """
         Predict whether a text is fake or real news.
         
         Args:
             text (str): Input text
             detailed (bool): Whether to return detailed analysis
+            explain (bool): Whether to return model explanations
+            explanation_method (str): Method for explanations ('lime', 'shap', or 'both')
+            num_features (int): Number of features to include in explanations
             
         Returns:
             dict: Prediction results
@@ -151,6 +175,14 @@ class ImprovedFakeNewsDetector:
             # Add detailed analysis if requested
             if detailed:
                 result.update(self._generate_detailed_analysis(text, processed_text, prediction, confidence))
+            
+            # Add model explanations if requested
+            if explain and EXPLAINERS_AVAILABLE and self.explainer:
+                result['model_explanations'] = self._generate_model_explanations(
+                    text,
+                    method=explanation_method,
+                    num_features=num_features
+                )
             
             return result
             
@@ -202,6 +234,55 @@ class ImprovedFakeNewsDetector:
             'explanation': explanation,
             'credibility_score': self._calculate_credibility_score(features, style_analysis, warning_signs, confidence)
         }
+    
+    def _generate_model_explanations(self, text, method="lime", num_features=10):
+        """
+        Generate model explanations using LIME and/or SHAP.
+        
+        Args:
+            text (str): Input text
+            method (str): Explanation method ('lime', 'shap', or 'both')
+            num_features (int): Number of features to include
+            
+        Returns:
+            dict: Model explanations
+        """
+        if not EXPLAINERS_AVAILABLE or not self.explainer:
+            return {"error": "Explainers not available"}
+        
+        try:
+            # Get explanations
+            if method.lower() == "lime":
+                explanations = self.explainer.explain_with_lime(text, num_features=num_features)
+                return {
+                    "method": "LIME",
+                    "explanations": explanations,
+                    "highlighted_text": self.explainer.get_highlighted_text(text, explanations)
+                }
+            
+            elif method.lower() == "shap":
+                explanations = self.explainer.explain_with_shap(text, num_features=num_features)
+                return {
+                    "method": "SHAP",
+                    "explanations": explanations,
+                    "highlighted_text": self.explainer.get_highlighted_text(text, explanations)
+                }
+            
+            elif method.lower() == "both":
+                result = self.explainer.explain_prediction(text, method="both", num_features=num_features)
+                return {
+                    "method": "LIME+SHAP",
+                    "lime_explanations": result["explanations"].get("lime"),
+                    "shap_explanations": result["explanations"].get("shap"),
+                    "highlighted_text": result.get("highlighted_text_html")
+                }
+            
+            else:
+                return {"error": f"Unknown explanation method: {method}"}
+                
+        except Exception as e:
+            logger.error(f"Error generating model explanations: {e}", exc_info=True)
+            return {"error": f"Failed to generate explanations: {str(e)}"}
     
     def _identify_warning_signs(self, text):
         """
@@ -438,6 +519,54 @@ class ImprovedFakeNewsDetector:
         
         logger.info(f"Report saved to {report_path}")
         return report_path
+    
+    def explain_prediction_with_lime(self, text, num_features=10):
+        """
+        Generate LIME explanations for a text prediction.
+        
+        Args:
+            text (str): Text to analyze
+            num_features (int): Number of features to include
+            
+        Returns:
+            dict: LIME explanation results
+        """
+        if not EXPLAINERS_AVAILABLE or not self.explainer:
+            return {"error": "LIME explainer not available"}
+        
+        return self.explainer.explain_with_lime(text, num_features=num_features)
+    
+    def explain_prediction_with_shap(self, text, num_features=10):
+        """
+        Generate SHAP explanations for a text prediction.
+        
+        Args:
+            text (str): Text to analyze
+            num_features (int): Number of features to include
+            
+        Returns:
+            dict: SHAP explanation results
+        """
+        if not EXPLAINERS_AVAILABLE or not self.explainer:
+            return {"error": "SHAP explainer not available"}
+        
+        return self.explainer.explain_with_shap(text, num_features=num_features)
+    
+    def get_combined_explanation(self, text, num_features=10):
+        """
+        Get both LIME and SHAP explanations for a text.
+        
+        Args:
+            text (str): Text to analyze
+            num_features (int): Number of features to include
+            
+        Returns:
+            dict: Combined explanation results
+        """
+        if not EXPLAINERS_AVAILABLE or not self.explainer:
+            return {"error": "Explainers not available"}
+        
+        return self.explainer.explain_prediction(text, method="both", num_features=num_features)
 
 # Example usage
 if __name__ == "__main__":
@@ -481,6 +610,25 @@ if __name__ == "__main__":
     if 'explanation' in real_result:
         print(f"Explanation: {real_result['explanation']}")
     
-    # Save reports
-    detector.save_report(fake_news_example, fake_result, "fake_news_report.json")
-    detector.save_report(real_news_example, real_result, "real_news_report.json") 
+    # Generate explanations if available
+    if EXPLAINERS_AVAILABLE:
+        print("\n--- LIME and SHAP Explanations ---")
+        
+        # Get explanations for fake news
+        fake_explanations = detector.get_combined_explanation(fake_news_example)
+        
+        if "error" not in fake_explanations:
+            print("\nFake News LIME Explanation:")
+            lime_features = fake_explanations["explanations"]["lime"]["top_features"]
+            for i, feature in enumerate(lime_features[:5]):
+                print(f"  {i+1}. {feature['word']}: {feature['importance']:.4f}")
+                
+            print("\nFake News SHAP Explanation:")
+            if "shap" in fake_explanations["explanations"]:
+                shap_features = fake_explanations["explanations"]["shap"]["top_features"]
+                for i, feature in enumerate(shap_features[:5]):
+                    print(f"  {i+1}. {feature['word']}: {feature['importance']:.4f}")
+        
+        # Save reports
+        detector.save_report(fake_news_example, fake_result, "fake_news_report.json")
+        detector.save_report(real_news_example, real_result, "real_news_report.json") 

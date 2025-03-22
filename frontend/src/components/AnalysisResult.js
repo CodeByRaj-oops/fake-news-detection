@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/solid';
 import CredibilityMeter from './CredibilityMeter';
 import DetailedAnalysisPanel from './DetailedAnalysisPanel';
+import ModelExplanationPanel from './ModelExplanationPanel';
 
 function AnalysisResult() {
   const { analysisResult, analysisText } = useAnalysis();
@@ -25,6 +26,7 @@ function AnalysisResult() {
     credibility_score: credibilityScore,
     explanation, 
     detailed_analysis: detailedAnalysis,
+    model_explanations: modelExplanations,
     timestamp 
   } = analysisResult;
 
@@ -108,6 +110,11 @@ function AnalysisResult() {
             <p>{explanation}</p>
           </div>
         </div>
+      )}
+
+      {/* Model explanations */}
+      {modelExplanations && (
+        <ModelExplanationPanel explanations={modelExplanations} />
       )}
 
       {/* Detailed analysis if available */}

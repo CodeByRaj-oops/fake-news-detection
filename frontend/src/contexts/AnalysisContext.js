@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import * as newsApi from '../api/newsApi';
@@ -24,14 +24,38 @@ export function AnalysisProvider({ children }) {
   const [reports, setReports] = useState([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   
+  // State for model explanations
+  const [explanationMethods, setExplanationMethods] = useState([]);
+  const [isLoadingExplanationMethods, setIsLoadingExplanationMethods] = useState(false);
+
+  // Load explanation methods on mount
+  useEffect(() => {
+    const loadExplanationMethods = async () => {
+      setIsLoadingExplanationMethods(true);
+      try {
+        const methods = await newsApi.getExplanationMethods();
+        setExplanationMethods(methods);
+      } catch (err) {
+        console.error('Failed to load explanation methods:', err);
+      } finally {
+        setIsLoadingExplanationMethods(false);
+      }
+    };
+
+    loadExplanationMethods();
+  }, []);
+  
   // Analyze text function
-  const analyzeText = useCallback(async (text, detailed = true, saveReport = false) => {
+  const analyzeText = useCallback(async (text, detailed = true, saveReport = false, 
+                                       explain = false, explanationMethod = 'lime', numFeatures = 10) => {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisText(text);
     
     try {
-      const result = await newsApi.analyzeText(text, detailed, saveReport);
+      const result = await newsApi.analyzeText(
+        text, detailed, saveReport, explain, explanationMethod, numFeatures
+      );
       setAnalysisResult(result);
       
       // Navigate to results page
@@ -45,6 +69,20 @@ export function AnalysisProvider({ children }) {
       setIsAnalyzing(false);
     }
   }, [navigate]);
+
+  // Generate explanations for text
+  const explainText = useCallback(async (text, method = 'lime', numFeatures = 10) => {
+    setError(null);
+    
+    try {
+      const result = await newsApi.explainText(text, method, numFeatures);
+      return result;
+    } catch (err) {
+      setError(err.message || 'An error occurred generating explanations');
+      toast.error(err.message || 'Failed to generate explanations');
+      return null;
+    }
+  }, []);
   
   // Load history
   const loadHistory = useCallback(async (limit = 10, offset = 0) => {
@@ -144,6 +182,11 @@ export function AnalysisProvider({ children }) {
     isLoadingReports,
     loadReports,
     getReport,
+    
+    // Model Explanations
+    explanationMethods,
+    isLoadingExplanationMethods,
+    explainText,
     
     // Error
     error,

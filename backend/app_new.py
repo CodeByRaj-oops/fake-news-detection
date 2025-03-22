@@ -1,411 +1,484 @@
 #!/usr/bin/env python3
 """
-FastAPI backend for fake news detection with advanced analysis capabilities.
+FastAPI backend for fake news detection system with improved models and detailed explanations.
 """
 
 import os
 import sys
+import re
 import json
 import logging
+import shutil
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Union
-from pathlib import Path
-
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Depends, Request
+from typing import List, Dict, Any, Optional
+from fastapi import FastAPI, HTTPException, Request, Body, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-import uvicorn
 
-# Add the backend directory to path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(script_dir)
-
-# Import detector
-from improved_predict import ImprovedFakeNewsDetector
-
-# Configure logging
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Initialize app
-app = FastAPI(
-    title="Fake News Detector API",
-    description="API for detecting fake news with detailed analysis",
-    version="1.0.0"
-)
+# Add parent directory to path for imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with frontend origin
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Import fake news detection model
+from improved_predict import ImprovedFakeNewsDetector
 
-# Create report directory
-REPORTS_DIR = os.path.join(script_dir, "reports")
-os.makedirs(REPORTS_DIR, exist_ok=True)
-
-# Create history directory to store request/response history
-HISTORY_DIR = os.path.join(script_dir, "history")
-os.makedirs(HISTORY_DIR, exist_ok=True)
-
-# Initialize detector as a global variable
-detector = ImprovedFakeNewsDetector()
-
-# Pydantic models for request/response
+# Define Pydantic models for request/response
 class TextAnalysisRequest(BaseModel):
-    text: str = Field(..., title="News text", description="The text to analyze for fake news detection", min_length=10)
-    detailed: bool = Field(False, title="Detailed analysis", description="Whether to return detailed analysis")
-    save_report: bool = Field(False, title="Save report", description="Whether to save a detailed report")
+    """Schema for text analysis request"""
+    text: str = Field(..., min_length=50, description="Text to analyze")
+    detailed: bool = Field(False, description="Whether to include detailed analysis")
+    save_report: bool = Field(False, description="Whether to save a report")
+    explain: bool = Field(False, description="Whether to include model explanations")
+    explanation_method: str = Field("lime", description="Method for explanations: 'lime', 'shap', or 'both'")
+    num_features: int = Field(10, description="Number of features to include in explanations")
 
-class CredibilityScore(BaseModel):
-    score: float = Field(..., title="Credibility score", description="Credibility score (0-100)")
-    description: str = Field(..., title="Description", description="Description of the credibility score")
-
-class TextFeatures(BaseModel):
-    word_count: int
-    avg_word_length: float
-    sentence_count: int
-    avg_sentence_length: float
-    exclamation_count: int
-    question_count: int
-    capitalized_ratio: float
-    clickbait_score: int
-    polarity: float
-    subjectivity: float
-    personal_pronouns: int
-    punctuation_ratio: float
-
-class WritingStyle(BaseModel):
-    reading_ease: float
-    avg_word_complexity: float
-    hedging_phrases: int
-    exaggeration_phrases: int
-
-class WarningSignsAnalysis(BaseModel):
-    misinformation_indicators: List[str]
-    reliability_indicators: List[str]
-    excessive_punctuation: bool
-    excessive_capitalization: bool
-    social_media_callout: bool
-    source_credibility_issues: bool
-
-class WordAnalysis(BaseModel):
-    top_words: Dict[str, int]
-    top_bigrams: Dict[str, int]
-    emotional_language_count: int
-    scientific_language_count: int
-
-class DetailedAnalysis(BaseModel):
-    text_features: TextFeatures
-    writing_style: WritingStyle
-    warning_signs: WarningSignsAnalysis
-    word_analysis: WordAnalysis
-
-class ReportMetadata(BaseModel):
-    report_id: str
-    timestamp: str
-    filename: str
-    
 class TextAnalysisResponse(BaseModel):
-    prediction: str = Field(..., title="Prediction", description="Prediction label (FAKE or REAL)")
-    confidence: float = Field(..., title="Confidence", description="Confidence score (0-1)")
-    credibility_score: Optional[float] = Field(None, title="Credibility score", description="Credibility score (0-100)")
-    explanation: Optional[str] = Field(None, title="Explanation", description="Human-readable explanation of the prediction")
-    detailed_analysis: Optional[DetailedAnalysis] = Field(None, title="Detailed analysis", description="Detailed analysis of the text")
-    report: Optional[ReportMetadata] = Field(None, title="Report", description="Metadata of the saved report")
-    timestamp: str = Field(..., title="Timestamp", description="Timestamp of the prediction")
-
-class HistoryItem(BaseModel):
-    id: str
-    text_preview: str
+    """Schema for text analysis response"""
     prediction: str
     confidence: float
-    credibility_score: Optional[float]
     timestamp: str
+    detailed_analysis: Optional[Dict[str, Any]] = None
+    explanation: Optional[str] = None
+    credibility_score: Optional[float] = None
+    report_id: Optional[str] = None
+    history_id: Optional[str] = None
+    model_explanations: Optional[Dict[str, Any]] = None
 
-class ErrorResponse(BaseModel):
-    error: str
+class HistoryItem(BaseModel):
+    """Schema for history item"""
+    id: str
+    text: str
+    prediction: str
+    confidence: float
+    timestamp: str
+    credibility_score: Optional[float] = None
+    report_id: Optional[str] = None
 
-def save_history(request_data: Dict, response_data: Dict) -> str:
-    """Save request/response history to a file and return the history ID."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    history_id = f"history_{timestamp}"
-    
-    # Create history record
-    history_record = {
-        "request": request_data,
-        "response": response_data,
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    # Save to file
-    history_path = os.path.join(HISTORY_DIR, f"{history_id}.json")
-    with open(history_path, 'w') as f:
-        json.dump(history_record, f, indent=2)
-    
-    logger.info(f"History saved to {history_path}")
-    return history_id
+class ReportItem(BaseModel):
+    """Schema for report item"""
+    id: str
+    text: str
+    prediction: str
+    confidence: float
+    timestamp: str
+    detailed_analysis: Optional[Dict[str, Any]] = None
+    explanation: Optional[str] = None
+    credibility_score: Optional[float] = None
+    model_explanations: Optional[Dict[str, Any]] = None
 
-@app.get("/", response_class=JSONResponse)
+class HistoryListResponse(BaseModel):
+    """Schema for history list response"""
+    items: List[HistoryItem]
+    total: int
+
+class ReportListResponse(BaseModel):
+    """Schema for report list response"""
+    items: List[ReportItem]
+    total: int
+
+class ExplanationRequest(BaseModel):
+    """Schema for explanation request"""
+    text: str = Field(..., min_length=50, description="Text to explain")
+    method: str = Field("lime", description="Explanation method: 'lime', 'shap', or 'both'")
+    num_features: int = Field(10, description="Number of features to include")
+
+class ExplanationResponse(BaseModel):
+    """Schema for explanation response"""
+    method: str
+    explanations: Dict[str, Any]
+    highlighted_text: Optional[str] = None
+    error: Optional[str] = None
+
+# Create FastAPI app
+app = FastAPI(
+    title="Fake News Detection API",
+    description="API for detecting fake news using advanced ML models with detailed analysis and explanations",
+    version="2.0.0"
+)
+
+# Add CORS middleware with explicit frontend URLs
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", 
+                  "http://localhost:3003", "http://localhost:3004", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+)
+
+# Initialize directories
+REPORTS_DIR = os.path.join(script_dir, 'reports')
+HISTORY_DIR = os.path.join(script_dir, 'history')
+os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(HISTORY_DIR, exist_ok=True)
+
+# Initialize detector
+detector = ImprovedFakeNewsDetector()
+
+@app.get("/", tags=["General"])
 async def root():
-    """Root endpoint that returns API information."""
+    """API health check and info endpoint"""
     return {
-        "name": "Fake News Detector API",
-        "version": "1.0.0",
-        "description": "API for detecting fake news with detailed analysis",
-        "endpoints": {
-            "POST /analyze": "Analyze text for fake news",
-            "GET /history": "Get analysis history",
-            "GET /history/{history_id}": "Get specific analysis from history",
-            "GET /reports": "Get list of saved reports",
-            "GET /reports/{report_id}": "Get specific report"
-        }
+        "message": "Fake News Detection API is running",
+        "version": "2.0.0",
+        "status": "active"
     }
 
-@app.post("/analyze", response_model=TextAnalysisResponse, responses={400: {"model": ErrorResponse}})
-async def analyze_text(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    analysis_request: TextAnalysisRequest
-):
+@app.post("/analyze", response_model=TextAnalysisResponse, tags=["Analysis"])
+async def analyze_text(request: TextAnalysisRequest):
     """
-    Analyze text for fake news detection.
+    Analyze text for fake news indicators
     
-    Returns prediction with confidence score and optional detailed analysis.
+    Args:
+        request: Request object containing text and options
+        
+    Returns:
+        Analysis results
     """
+    logger.info(f"Received analysis request - detailed: {request.detailed}, save_report: {request.save_report}")
+    
     try:
-        text = analysis_request.text
-        detailed = analysis_request.detailed
-        save_report = analysis_request.save_report
+        # Analyze text
+        result = detector.predict(
+            request.text, 
+            detailed=request.detailed,
+            explain=request.explain,
+            explanation_method=request.explanation_method,
+            num_features=request.num_features
+        )
         
-        # Check if text is too short
-        if len(text.strip()) < 10:
-            raise HTTPException(status_code=400, detail="Text is too short for analysis")
-        
-        # Perform prediction
-        result = detector.predict(text, detailed=detailed)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
         
         # Save report if requested
-        report_metadata = None
-        if save_report and detailed:
+        report_id = None
+        if request.save_report and request.detailed:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            report_filename = f"report_{timestamp}.json"
-            report_path = detector.save_report(text, result, filename=report_filename)
-            
-            report_metadata = {
-                "report_id": timestamp,
-                "timestamp": datetime.now().isoformat(),
-                "filename": report_filename
-            }
+            report_id = f"report_{timestamp}"
+            report_path = detector.save_report(request.text, result, f"{report_id}.json")
+            logger.info(f"Report saved: {report_path}")
+            result['report_id'] = report_id
         
-        # Prepare response
-        response_data = {
-            "prediction": result.get("prediction", "Unknown"),
-            "confidence": result.get("confidence", 0.0),
-            "timestamp": datetime.now().isoformat()
+        # Save to history
+        history_id = f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        history_item = {
+            'id': history_id,
+            'text': request.text,
+            'prediction': result['prediction'],
+            'confidence': result['confidence'],
+            'timestamp': result['timestamp'],
+            'report_id': report_id
         }
         
-        # Add detailed analysis if available
-        if detailed:
-            response_data["credibility_score"] = result.get("credibility_score")
-            response_data["explanation"] = result.get("explanation")
-            response_data["detailed_analysis"] = result.get("detailed_analysis")
+        if 'credibility_score' in result:
+            history_item['credibility_score'] = result['credibility_score']
         
-        # Add report metadata if available
-        if report_metadata:
-            response_data["report"] = report_metadata
+        with open(os.path.join(HISTORY_DIR, f"{history_id}.json"), 'w') as f:
+            json.dump(history_item, f, indent=2)
         
-        # Save request/response to history in background
-        request_data = {
-            "text": text,
-            "detailed": detailed,
-            "save_report": save_report
-        }
-        background_tasks.add_task(save_history, request_data, response_data)
+        logger.info(f"History saved: {history_id}")
+        result['history_id'] = history_id
         
-        return response_data
-        
+        return result
+    
     except Exception as e:
         logger.error(f"Error analyzing text: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error analyzing text: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/history", response_model=List[HistoryItem])
-async def get_history(
-    limit: int = Query(10, ge=1, le=100, description="Maximum number of history items to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination")
-):
-    """Get analysis history with pagination."""
+@app.get("/history", response_model=HistoryListResponse, tags=["History"])
+async def get_history():
+    """
+    Get list of analysis history
+    
+    Returns:
+        List of history items
+    """
     try:
-        # List all history files
-        history_files = sorted(
-            [f for f in os.listdir(HISTORY_DIR) if f.endswith('.json')],
-            reverse=True
-        )
-        
-        # Apply pagination
-        paginated_files = history_files[offset:offset + limit]
-        
-        # Load history items
+        history_files = os.listdir(HISTORY_DIR)
         history_items = []
-        for filename in paginated_files:
-            file_path = os.path.join(HISTORY_DIR, filename)
-            try:
-                with open(file_path, 'r') as f:
-                    history_data = json.load(f)
-                
-                # Extract history ID from filename
-                history_id = os.path.splitext(filename)[0]
-                
-                # Create preview (first 100 chars)
-                text = history_data.get("request", {}).get("text", "")
-                text_preview = text[:100] + "..." if len(text) > 100 else text
-                
-                # Get response data
-                response = history_data.get("response", {})
-                
-                # Create history item
-                history_item = {
-                    "id": history_id,
-                    "text_preview": text_preview,
-                    "prediction": response.get("prediction", "Unknown"),
-                    "confidence": response.get("confidence", 0.0),
-                    "credibility_score": response.get("credibility_score"),
-                    "timestamp": history_data.get("timestamp", "")
-                }
-                
-                history_items.append(history_item)
-                
-            except Exception as e:
-                logger.error(f"Error loading history file {filename}: {e}")
         
-        return history_items
+        for filename in sorted(history_files, reverse=True):
+            if filename.endswith(".json"):
+                with open(os.path.join(HISTORY_DIR, filename), 'r') as f:
+                    item = json.load(f)
+                    history_items.append(item)
         
+        return {
+            "items": history_items,
+            "total": len(history_items)
+        }
+    
     except Exception as e:
-        logger.error(f"Error getting history: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting history: {str(e)}")
+        logger.error(f"Error retrieving history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/history/{history_id}", response_model=Dict[str, Any])
-async def get_history_item(
-    history_id: str
-):
-    """Get specific analysis from history."""
-    try:
-        # Check if history file exists
-        history_file = f"{history_id}.json"
-        history_path = os.path.join(HISTORY_DIR, history_file)
+@app.get("/history/{history_id}", tags=["History"])
+async def get_history_item(history_id: str):
+    """
+    Get a specific history item
+    
+    Args:
+        history_id: ID of the history item
         
-        if not os.path.exists(history_path):
+    Returns:
+        History item details
+    """
+    try:
+        file_path = os.path.join(HISTORY_DIR, f"{history_id}.json")
+        if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail=f"History item {history_id} not found")
         
-        # Load history item
-        with open(history_path, 'r') as f:
-            history_data = json.load(f)
+        with open(file_path, 'r') as f:
+            item = json.load(f)
         
-        return history_data
-        
+        return item
+    
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting history item {history_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting history item: {str(e)}")
+        logger.error(f"Error retrieving history item: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/reports", response_model=List[ReportMetadata])
-async def get_reports(
-    limit: int = Query(10, ge=1, le=100, description="Maximum number of reports to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination")
-):
-    """Get list of saved reports with pagination."""
+@app.delete("/history/{history_id}", tags=["History"])
+async def delete_history_item(history_id: str):
+    """
+    Delete a specific history item
+    
+    Args:
+        history_id: ID of the history item
+        
+    Returns:
+        Confirmation message
+    """
     try:
-        # List all report files
-        report_files = sorted(
-            [f for f in os.listdir(REPORTS_DIR) if f.endswith('.json')],
-            reverse=True
-        )
+        file_path = os.path.join(HISTORY_DIR, f"{history_id}.json")
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"History item {history_id} not found")
         
-        # Apply pagination
-        paginated_files = report_files[offset:offset + limit]
+        os.remove(file_path)
+        logger.info(f"Deleted history item: {history_id}")
         
-        # Create metadata for each report
-        reports = []
-        for filename in paginated_files:
-            # Extract report ID from filename (remove "report_" prefix and ".json" suffix)
-            report_id = filename.replace("report_", "").replace(".json", "")
-            
-            # Get file timestamp
-            file_path = os.path.join(REPORTS_DIR, filename)
-            file_timestamp = datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
-            
-            # Create report metadata
-            report_metadata = {
-                "report_id": report_id,
-                "timestamp": file_timestamp,
-                "filename": filename
-            }
-            
-            reports.append(report_metadata)
-        
-        return reports
-        
+        return {"message": f"History item {history_id} deleted successfully"}
+    
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting reports: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting reports: {str(e)}")
+        logger.error(f"Error deleting history item: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/reports/{report_id}", response_model=Dict[str, Any])
-async def get_report(
-    report_id: str
-):
-    """Get specific report by ID."""
+@app.get("/reports", response_model=ReportListResponse, tags=["Reports"])
+async def get_reports():
+    """
+    Get list of saved reports
+    
+    Returns:
+        List of report items
+    """
     try:
-        # Check if report file exists
-        report_file = f"report_{report_id}.json"
-        report_path = os.path.join(REPORTS_DIR, report_file)
+        report_files = os.listdir(REPORTS_DIR)
+        report_items = []
         
-        if not os.path.exists(report_path):
+        for filename in sorted(report_files, reverse=True):
+            if filename.endswith(".json"):
+                with open(os.path.join(REPORTS_DIR, filename), 'r') as f:
+                    report_data = json.load(f)
+                    
+                    # Extract ID from filename
+                    report_id = filename.replace(".json", "")
+                    
+                    # Create summary item
+                    item = {
+                        "id": report_id,
+                        "text": report_data.get("original_text", ""),
+                        "prediction": report_data["prediction"].get("prediction", ""),
+                        "confidence": report_data["prediction"].get("confidence", 0.0),
+                        "timestamp": report_data["prediction"].get("timestamp", ""),
+                        "credibility_score": report_data["prediction"].get("credibility_score")
+                    }
+                    
+                    report_items.append(item)
+        
+        return {
+            "items": report_items,
+            "total": len(report_items)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error retrieving reports: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/reports/{report_id}", tags=["Reports"])
+async def get_report(report_id: str):
+    """
+    Get a specific report
+    
+    Args:
+        report_id: ID of the report
+        
+    Returns:
+        Report details
+    """
+    try:
+        file_path = os.path.join(REPORTS_DIR, f"{report_id}.json")
+        if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
         
-        # Load report
-        with open(report_path, 'r') as f:
-            report_data = json.load(f)
+        with open(file_path, 'r') as f:
+            report = json.load(f)
         
-        return report_data
+        # Add report ID to response
+        if "prediction" in report:
+            report["prediction"]["id"] = report_id
         
+        return report
+    
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting report {report_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting report: {str(e)}")
+        logger.error(f"Error retrieving report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-# Serve static files for the frontend
-frontend_dir = os.path.join(os.path.dirname(script_dir), "frontend", "build")
-if os.path.exists(frontend_dir):
-    app.mount("/app", StaticFiles(directory=frontend_dir, html=True), name="frontend")
-
-# Run the app
-if __name__ == "__main__":
+@app.delete("/reports/{report_id}", tags=["Reports"])
+async def delete_report(report_id: str):
+    """
+    Delete a specific report
+    
+    Args:
+        report_id: ID of the report
+        
+    Returns:
+        Confirmation message
+    """
     try:
-        # Try to load model to verify it's working
-        if detector.model is None:
-            logger.warning("Model not loaded, API will return default values")
+        file_path = os.path.join(REPORTS_DIR, f"{report_id}.json")
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
         
-        # Run the server
-        port = int(os.environ.get("PORT", 8000))
-        host = os.environ.get("HOST", "127.0.0.1")
+        os.remove(file_path)
+        logger.info(f"Deleted report: {report_id}")
         
-        logger.info(f"Starting server on {host}:{port}")
-        uvicorn.run("app:app", host=host, port=port, reload=True)
-        
+        return {"message": f"Report {report_id} deleted successfully"}
+    
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error starting server: {e}", exc_info=True)
+        logger.error(f"Error deleting report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/explain", response_model=ExplanationResponse, tags=["Explanations"])
+async def explain_text(request: ExplanationRequest):
+    """
+    Generate explanations for text classification using LIME or SHAP
+    
+    Args:
+        request: Request object containing text and explanation options
+        
+    Returns:
+        Explanation results
+    """
+    logger.info(f"Received explanation request - method: {request.method}")
+    
+    try:
+        if request.method.lower() == "lime":
+            result = detector.explain_prediction_with_lime(
+                request.text, 
+                num_features=request.num_features
+            )
+            if "error" in result:
+                raise HTTPException(status_code=400, detail=result["error"])
+            
+            highlighted_text = detector.explainer.get_highlighted_text(request.text, result)
+            return {
+                "method": "LIME",
+                "explanations": result,
+                "highlighted_text": highlighted_text
+            }
+            
+        elif request.method.lower() == "shap":
+            result = detector.explain_prediction_with_shap(
+                request.text, 
+                num_features=request.num_features
+            )
+            if "error" in result:
+                raise HTTPException(status_code=400, detail=result["error"])
+            
+            highlighted_text = detector.explainer.get_highlighted_text(request.text, result)
+            return {
+                "method": "SHAP",
+                "explanations": result,
+                "highlighted_text": highlighted_text
+            }
+            
+        elif request.method.lower() == "both":
+            result = detector.get_combined_explanation(
+                request.text, 
+                num_features=request.num_features
+            )
+            if "error" in result:
+                raise HTTPException(status_code=400, detail=result["error"])
+            
+            return {
+                "method": "LIME+SHAP",
+                "explanations": result["explanations"],
+                "highlighted_text": result.get("highlighted_text_html")
+            }
+            
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported explanation method: {request.method}")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating explanation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/explain/methods", tags=["Explanations"])
+async def get_explanation_methods():
+    """
+    Get available explanation methods
+    
+    Returns:
+        List of available explanation methods
+    """
+    methods = [
+        {
+            "id": "lime",
+            "name": "LIME",
+            "description": "Local Interpretable Model-agnostic Explanations"
+        },
+        {
+            "id": "shap",
+            "name": "SHAP",
+            "description": "SHapley Additive exPlanations"
+        },
+        {
+            "id": "both",
+            "name": "LIME + SHAP",
+            "description": "Combined explanations using both LIME and SHAP"
+        }
+    ]
+    
+    return {"methods": methods}
+
+@app.get("/health", tags=["General"])
+async def health_check():
+    """API health check endpoint"""
+    return {
+        "status": "ok",
+        "service": "fake-news-detection-backend",
+        "version": "2.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
+
+# Run the application
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
