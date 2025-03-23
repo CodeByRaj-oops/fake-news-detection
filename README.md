@@ -1,114 +1,133 @@
-# Fake News Detection with Enhanced Text Processing
+# Fake News Detection System
 
-## Overview
+A comprehensive application for detecting fake news using advanced text processing and machine learning techniques.
 
-This application provides a comprehensive fake news detection system with enhanced text processing capabilities. The system analyzes news articles and determines their credibility using machine learning and advanced linguistic analysis.
+## Project Structure
 
-## New Enhanced Features
+This project is organized into two main components:
 
-The system now includes enhanced text processing capabilities:
+```
+h1/
+├── backend/            # Python backend API
+│   ├── app/            # Main application modules
+│   ├── models/         # Trained machine learning models
+│   ├── utils/          # Utility functions including text processors
+│   └── tests/          # Backend tests
+├── frontend/           # React frontend application
+│   ├── public/         # Static assets
+│   └── src/            # Source code
+│       ├── components/ # React components
+│       ├── pages/      # Page components
+│       └── utils/      # Frontend utilities
+├── data/               # Data directories (not included in repo)
+└── scripts/            # Helper scripts
+```
 
-### 1. Language Detection
-- Automatically identifies the language of input text
-- Supports multiple languages with confidence scores
-- Prevents analysis of unsupported languages
+## Features
 
-### 2. Entity Extraction
-- Identifies named entities (people, organizations, locations, etc.)
-- Provides entity counts by type
-- Useful for analyzing source credibility
+- Machine learning-based fake news detection
+- Text analysis features:
+  - Language detection
+  - Entity extraction
+  - Readability metrics
+  - Propaganda technique detection
+  - Text uniqueness analysis
+- Interactive frontend dashboard
+- API for integration with other applications
 
-### 3. Readability Metrics
-- Calculates multiple standardized readability scores
-- Includes Flesch Reading Ease, Gunning Fog Index, and more
-- Identifies content with suspiciously simple or complex language
+## Prerequisites
 
-### 4. Text Uniqueness Analysis
-- Measures lexical diversity and uniqueness
-- Generates content hash for duplicate detection
-- Identifies machine-generated or repetitive content
+- Python 3.8+ (for backend)
+- Node.js 14+ (for frontend)
+- A modern web browser
 
-### 5. Propaganda Technique Detection
-- Identifies common propaganda techniques
-- Calculates overall propaganda score
-- Highlights specific techniques used in the text
-
-## Directory Structure
-
-- `/backend`: API server and machine learning models
-  - `/utils`: Text processing utilities
-    - `advanced_text_processor.py`: Enhanced text processing features
-    - `improved_text_processor.py`: Base text processing
-  - `enhanced_predict.py`: Enhanced prediction module
-  - `app_new.py`: API with enhanced endpoints
-  
-- `/frontend`: React frontend application
-
-## Setup Instructions
+## Installation
 
 ### Backend Setup
 
 1. Navigate to the backend directory:
-```
-cd backend
-```
+   ```
+   cd backend
+   ```
 
-2. Install required dependencies:
-```
-pip install -r requirements.txt
-```
+2. Create a virtual environment (optional but recommended):
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-3. Run the backend server:
-```
-python app_new.py
-```
-
-The API server will start on http://localhost:8000.
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
 ### Frontend Setup
 
 1. Navigate to the frontend directory:
-```
-cd frontend
-```
+   ```
+   cd frontend
+   ```
 
 2. Install dependencies:
+   ```
+   npm install
+   ```
+
+## Running the Application
+
+### Option 1: Using the Integrated Script
+
+You can run both backend and frontend with a single command:
+
 ```
-npm install
+.\run-both.ps1
 ```
 
-3. Start the development server:
-```
-npm run dev
-```
+This will:
+- Start the backend server on port 8000
+- Start the frontend server on port 3000
+- Open the application in your default browser
+- Monitor server health
 
-The frontend will be available at http://localhost:3000.
+### Option 2: Manual Startup
 
-## Testing Enhanced Features
-
-To test the enhanced text processing features:
+#### Start Backend
 
 ```
 cd backend
-python test_enhanced_processing.py
+python -m uvicorn fixed_backend:app --reload --host 0.0.0.0 --port 8000
 ```
 
-This script demonstrates all the new enhanced text processing capabilities with sample texts.
+#### Start Frontend
+
+```
+cd frontend
+npm start
+```
 
 ## API Documentation
 
-API documentation is available at:
-- http://localhost:8000/docs (Swagger UI)
-- http://localhost:8000/redoc (ReDoc)
+The API documentation is available when the backend is running:
 
-## Enhanced API Endpoints
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
-- `POST /analyze/enhanced`: Full analysis with enhanced features
-- `POST /detect-language`: Language detection
-- `POST /analyze/comprehensive`: Comprehensive text analysis
+## Development Notes
 
-## Detailed Documentation
+- The frontend communicates with the backend via REST API
+- Backend configuration can be modified in `backend/config.py`
+- Frontend configuration can be modified in `frontend/src/config.js`
+- The application uses FastAPI for the backend and React for the frontend
 
-For more detailed information about the enhanced features, refer to:
-- [Enhanced Features Documentation](backend/ENHANCED-FEATURES.md)
-- [Backend README](backend/README.md) 
+## Troubleshooting
+
+If you encounter any issues:
+
+1. Ensure all dependencies are installed correctly
+2. Check if the backend server is running and accessible
+3. Verify that the frontend is configured with the correct backend URL
+4. Look for error messages in the terminal running the servers
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

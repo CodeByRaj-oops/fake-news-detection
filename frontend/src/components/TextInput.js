@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from '../config.js';
 
-const API_URL = 'http://localhost:8000';
-
+/**
+ * TextInput Component
+ * Handles text submission and displaying analysis results
+ */
 const TextInput = () => {
   const [inputText, setInputText] = useState('');
   const [result, setResult] = useState(null);
@@ -13,11 +16,17 @@ const TextInput = () => {
   // Check API health on component mount
   useEffect(() => {
     checkApiHealth();
+    // Set up periodic health checks
+    const interval = setInterval(checkApiHealth, 30000); // Check every 30 seconds
+    return () => clearInterval(interval); // Cleanup on unmount
   }, []);
 
+  /**
+   * Check backend API health status
+   */
   const checkApiHealth = async () => {
     try {
-      const response = await axios.get(`${API_URL}/health`);
+      const response = await axios.get(`${config.apiUrl}${config.endpoints.health}`, { timeout: config.timeout });
       if (response.data && response.data.status === 'ok') {
         setApiStatus('connected');
       } else {
@@ -29,10 +38,16 @@ const TextInput = () => {
     }
   };
 
+  /**
+   * Handle text input changes
+   */
   const handleInputChange = (e) => {
     setInputText(e.target.value);
   };
 
+  /**
+   * Handle form submission for basic analysis
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -45,16 +60,16 @@ const TextInput = () => {
     setError(null);
     
     try {
-      const response = await axios.post(`${API_URL}/analyze`, {
+      const response = await axios.post(`${config.apiUrl}${config.endpoints.analyze}`, {
         text: inputText,
         explain: true
-      });
+      }, { timeout: config.timeout });
       
       setResult(response.data);
       setLoading(false);
     } catch (err) {
       console.error('Error analyzing text:', err);
-      setError('Failed to analyze text. Please check the API connection.');
+      setError(`Failed to analyze text: ${err.message || 'Unknown error'}. Please check the API connection.`);
       setLoading(false);
       
       // Recheck API health
@@ -62,6 +77,9 @@ const TextInput = () => {
     }
   };
 
+  /**
+   * Handle enhanced analysis request
+   */
   const handleEnhancedAnalysis = async () => {
     if (!inputText.trim()) {
       setError('Please enter some text to analyze');
@@ -72,15 +90,15 @@ const TextInput = () => {
     setError(null);
     
     try {
-      const response = await axios.post(`${API_URL}/analyze/enhanced`, {
+      const response = await axios.post(`${config.apiUrl}${config.endpoints.enhancedAnalyze}`, {
         text: inputText
-      });
+      }, { timeout: config.timeout });
       
       setResult(response.data);
       setLoading(false);
     } catch (err) {
       console.error('Error performing enhanced analysis:', err);
-      setError('Failed to perform enhanced analysis. Please check the API connection.');
+      setError(`Failed to perform enhanced analysis: ${err.message || 'Unknown error'}. Please check the API connection.`);
       setLoading(false);
       
       // Recheck API health
@@ -88,6 +106,9 @@ const TextInput = () => {
     }
   };
 
+  /**
+   * Get color based on API status
+   */
   const getStatusColor = () => {
     switch (apiStatus) {
       case 'connected':
@@ -99,6 +120,84 @@ const TextInput = () => {
       default:
         return 'gray';
     }
+  };
+
+  /**
+   * Render appropriate result content based on what data is available
+   */
+  const renderResultContent = () => {
+    if (!result) return null;
+
+    return (
+      <div className="result-container">
+        <h3>Analysis Result:</h3>
+        <div className={`prediction-badge ${result.label === 'FAKE' ? 'fake' : 'real'}`}>
+          {result.label}
+        </div>
+        <div className="confidence">
+          Confidence: {(result.confidence * 100).toFixed(2)}%
+        </div>
+        
+        {result.processed_text && (
+          <div className="processed-text">
+            <h4>Processed Text:</h4>
+            <p>{result.processed_text}</p>
+          </div>
+        )}
+        
+        {/* Display enhanced analysis results if available */}
+        {result.language && (
+          <div className="enhanced-results">
+            <h4>Enhanced Analysis:</h4>
+            
+            <div className="result-section">
+              <h5>Language:</h5>
+              <p>Detected: {result.language.language_name} ({result.language.language_code})</p>
+              <p>Confidence: {(result.language.confidence * 100).toFixed(2)}%</p>
+            </div>
+            
+            {result.entities && (
+              <div className="result-section">
+                <h5>Entities:</h5>
+                <ul>
+                  {result.entities.entities && Object.entries(result.entities.entities).map(([type, count]) => (
+                    <li key={type}>
+                      {type}: {count}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {result.readability && (
+              <div className="result-section">
+                <h5>Readability:</h5>
+                <p>Flesch Reading Ease: {result.readability.flesch_reading_ease.toFixed(2)}</p>
+                <p>Grade Level: {result.readability.average_grade_level ? result.readability.average_grade_level.toFixed(1) : 'N/A'}</p>
+              </div>
+            )}
+            
+            {result.propaganda && (
+              <div className="result-section">
+                <h5>Propaganda Techniques:</h5>
+                <p>Score: {result.propaganda.propaganda_score ? (result.propaganda.propaganda_score).toFixed(2) : 'N/A'}%</p>
+                {result.propaganda.techniques && Object.entries(result.propaganda.techniques).length > 0 && (
+                  <ul>
+                    {Object.entries(result.propaganda.techniques).map(([technique, count]) => (
+                      count > 0 && (
+                        <li key={technique}>
+                          {technique.replace('_', ' ')}: {count}
+                        </li>
+                      )
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -141,76 +240,7 @@ const TextInput = () => {
         </div>
       )}
       
-      {result && (
-        <div className="result-container">
-          <h3>Analysis Result:</h3>
-          <div className={`prediction-badge ${result.label === 'FAKE' ? 'fake' : 'real'}`}>
-            {result.label}
-          </div>
-          <div className="confidence">
-            Confidence: {(result.confidence * 100).toFixed(2)}%
-          </div>
-          
-          {result.processed_text && (
-            <div className="processed-text">
-              <h4>Processed Text:</h4>
-              <p>{result.processed_text}</p>
-            </div>
-          )}
-          
-          {/* Display enhanced analysis results if available */}
-          {result.language && (
-            <div className="enhanced-results">
-              <h4>Enhanced Analysis:</h4>
-              
-              <div className="result-section">
-                <h5>Language:</h5>
-                <p>Detected: {result.language.language_name} ({result.language.language_code})</p>
-                <p>Confidence: {(result.language.confidence * 100).toFixed(2)}%</p>
-              </div>
-              
-              {result.entities && (
-                <div className="result-section">
-                  <h5>Entities:</h5>
-                  <ul>
-                    {Object.entries(result.entities.entities).map(([type, count]) => (
-                      <li key={type}>
-                        {type}: {count}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
-              {result.readability && (
-                <div className="result-section">
-                  <h5>Readability:</h5>
-                  <p>Flesch Reading Ease: {result.readability.flesch_reading_ease.toFixed(2)}</p>
-                  <p>Grade Level: {result.readability.average_grade_level.toFixed(1)}</p>
-                </div>
-              )}
-              
-              {result.propaganda && (
-                <div className="result-section">
-                  <h5>Propaganda Score:</h5>
-                  <p>{result.propaganda.propaganda_score.toFixed(2)}%</p>
-                  {result.propaganda.techniques && Object.entries(result.propaganda.techniques).length > 0 && (
-                    <ul>
-                      {Object.entries(result.propaganda.techniques).map(([technique, count]) => (
-                        count > 0 && (
-                          <li key={technique}>
-                            {technique.replace('_', ' ')}: {count}
-                          </li>
-                        )
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {result && renderResultContent()}
       
       <style jsx>{`
         .text-input-container {
@@ -257,22 +287,27 @@ const TextInput = () => {
           border: none;
           border-radius: 4px;
           font-size: 16px;
+          font-weight: bold;
           cursor: pointer;
           transition: background-color 0.3s;
         }
         
         .analyze-btn {
-          background-color: #4a6fa5;
+          background-color: #4a90e2;
           color: white;
+        }
+        
+        .analyze-btn:hover {
+          background-color: #3a80d2;
         }
         
         .enhanced-btn {
-          background-color: #5d8aa8;
+          background-color: #6c5ce7;
           color: white;
         }
         
-        button:hover {
-          opacity: 0.9;
+        .enhanced-btn:hover {
+          background-color: #5c4cd7;
         }
         
         button:disabled {
@@ -281,75 +316,65 @@ const TextInput = () => {
         }
         
         .error-message {
-          color: #d9534f;
-          margin-bottom: 20px;
           padding: 10px;
-          background-color: #f8d7da;
+          margin-bottom: 20px;
+          background-color: #ffebee;
+          color: #d32f2f;
           border-radius: 4px;
         }
         
         .result-container {
-          background: white;
-          padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+          padding: 15px;
+          background-color: #e3f2fd;
+          border-radius: 4px;
         }
         
         .prediction-badge {
           display: inline-block;
-          padding: 8px 16px;
-          border-radius: 4px;
+          padding: 5px 15px;
+          border-radius: 20px;
           font-weight: bold;
-          margin-bottom: 10px;
+          margin: 10px 0;
         }
         
         .fake {
-          background-color: #f8d7da;
-          color: #721c24;
+          background-color: #ff6b6b;
+          color: white;
         }
         
         .real {
-          background-color: #d4edda;
-          color: #155724;
+          background-color: #51cf66;
+          color: white;
         }
         
         .confidence {
           margin-bottom: 15px;
-          font-size: 14px;
+          font-weight: bold;
         }
         
         .processed-text {
-          margin-top: 20px;
-          padding: 15px;
-          background: #f5f5f5;
+          margin-top: 15px;
+          padding: 10px;
+          background-color: #f8f9fa;
           border-radius: 4px;
         }
         
         .enhanced-results {
-          margin-top: 30px;
-          border-top: 1px solid #eee;
-          padding-top: 20px;
+          margin-top: 20px;
+          border-top: 1px solid #ddd;
+          padding-top: 15px;
         }
         
         .result-section {
-          margin-bottom: 20px;
+          margin-bottom: 15px;
+          padding: 10px;
+          background-color: #f8f9fa;
+          border-radius: 4px;
         }
         
-        h3 {
+        .result-section h5 {
           margin-top: 0;
-        }
-        
-        h4 {
-          margin-bottom: 10px;
-        }
-        
-        h5 {
-          margin: 10px 0 5px;
-        }
-        
-        ul {
-          margin: 5px 0;
-          padding-left: 20px;
+          color: #333;
         }
       `}</style>
     </div>

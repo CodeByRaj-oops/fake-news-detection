@@ -1,195 +1,171 @@
-# PowerShell script to start both backend and frontend servers
-Write-Host "`n=== Fake News Detection System Startup ===" -ForegroundColor Cyan
-Write-Host "Starting both backend and frontend servers..." -ForegroundColor Cyan
-Write-Host "This script will monitor and handle errors automatically.`n" -ForegroundColor Cyan
+# Integrated script to run both backend and frontend servers
+# Provides clean logging and automatically opens the application in the browser
 
-# Define colors for visual distinction
-$backendColor = "Green"
-$frontendColor = "Yellow" 
-$errorColor = "Red"
-$infoColor = "Cyan"
+# Configuration
+$backendPort = 8000
+$frontendPort = 3000
+$backendUrl = "http://localhost:$backendPort"
+$frontendUrl = "http://localhost:$frontendPort"
+$healthCheckEndpoint = "$backendUrl/health"
+$maxAttempts = 15  # Increased attempts
+$waitTime = 2 # seconds
 
-# Check if we're running as administrator
-function Test-Admin {
-    $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-    return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+# Script directory for relative paths
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Create function to write colored output
+function Write-ColorOutput($message, $color) {
+    Write-Host $message -ForegroundColor $color
 }
 
-# Create job to run the backend server
-function Start-BackendServer {
-    Write-Host "`n[BACKEND] Starting server..." -ForegroundColor $backendColor
-    
-    # Start backend using the script
-    $backendJob = Start-Job -ScriptBlock {
-        Set-Location $using:PWD
-        if (Test-Path ".\backend\start-backend.ps1") {
-            powershell -ExecutionPolicy Bypass -File ".\backend\start-backend.ps1"
-        } elseif (Test-Path ".\backend\app_new.py") {
-            cd backend
-            if (Test-Path ".\requirements.txt") {
-                python -m pip install -r requirements.txt
+# Function to check if a port is in use
+function Test-PortInUse($port) {
+    try {
+        $connections = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
+        return $null -ne $connections
+    }
+    catch {
+        Write-ColorOutput "Warning: Unable to check port $port. Assuming it's free." "Yellow"
+        return $false
+    }
+}
+
+# Kill processes using specific ports if necessary
+function Stop-ProcessOnPort($port) {
+    try {
+        Write-ColorOutput "Checking if port $port is in use..." "Yellow"
+        if (Test-PortInUse $port) {
+            Write-ColorOutput "Port $port is in use. Attempting to free it..." "Yellow"
+            $process = Get-Process -Id (Get-NetTCPConnection -LocalPort $port -State Listen).OwningProcess -ErrorAction SilentlyContinue
+            if ($process) {
+                Write-ColorOutput "Stopping process: $($process.ProcessName) (PID: $($process.Id))..." "Yellow"
+                Stop-Process -Id $process.Id -Force
+                Start-Sleep -Seconds 2
             }
-            python app_new.py
-        } else {
-            Write-Error "Backend server files not found"
-            exit 1
         }
     }
-    
-    Write-Host "[BACKEND] Started with job ID: $($backendJob.Id)" -ForegroundColor $backendColor
-    return $backendJob
-}
-
-# Create job to run the frontend server
-function Start-FrontendServer {
-    Write-Host "`n[FRONTEND] Starting server..." -ForegroundColor $frontendColor
-    
-    # Start frontend
-    $frontendJob = Start-Job -ScriptBlock {
-        Set-Location $using:PWD
-        if (Test-Path ".\npm-dev.cmd") {
-            # Use the batch file
-            cmd /c npm-dev.cmd
-        } elseif (Test-Path ".\frontend\package.json") {
-            # Direct approach
-            cd frontend
-            npm run dev
-        } else {
-            Write-Error "Frontend files not found"
-            exit 1
-        }
+    catch {
+        Write-ColorOutput "Error checking port $port. Please check manually." "Red"
     }
-    
-    Write-Host "[FRONTEND] Started with job ID: $($frontendJob.Id)" -ForegroundColor $frontendColor
-    return $frontendJob
 }
 
-# Monitor job status
-function Monitor-Jobs {
-    param (
-        [Parameter(Mandatory=$true)]
-        [System.Management.Automation.Job]$BackendJob,
-        
-        [Parameter(Mandatory=$true)]
-        [System.Management.Automation.Job]$FrontendJob
-    )
-    
-    $backendStarted = $false
-    $frontendStarted = $false
-    
-    # Monitor for 120 seconds (2 minutes)
-    $timeout = 120
-    $startTime = Get-Date
-    
-    while ((Get-Date) -lt $startTime.AddSeconds($timeout)) {
-        # Get backend status
-        if ($BackendJob.State -eq "Running" -and -not $backendStarted) {
-            Write-Host "[BACKEND] Server running" -ForegroundColor $backendColor
-            $backendStarted = $true
-        } elseif ($BackendJob.State -eq "Failed" -or $BackendJob.State -eq "Completed") {
-            Write-Host "[BACKEND] Server stopped: $($BackendJob.State)" -ForegroundColor $errorColor
-            Receive-Job -Job $BackendJob | ForEach-Object { Write-Host "[BACKEND] $_" -ForegroundColor $backendColor }
-            return $false
-        }
-        
-        # Get frontend status
-        if ($FrontendJob.State -eq "Running" -and -not $frontendStarted) {
-            Write-Host "[FRONTEND] Server running" -ForegroundColor $frontendColor
-            $frontendStarted = $true
-        } elseif ($FrontendJob.State -eq "Failed" -or $FrontendJob.State -eq "Completed") {
-            Write-Host "[FRONTEND] Server stopped: $($FrontendJob.State)" -ForegroundColor $errorColor
-            Receive-Job -Job $FrontendJob | ForEach-Object { Write-Host "[FRONTEND] $_" -ForegroundColor $frontendColor }
-            return $false
-        }
-        
-        # If both are running, we're good
-        if ($backendStarted -and $frontendStarted) {
-            Write-Host "`n[SUCCESS] Both servers are running!" -ForegroundColor $infoColor
+# Function to test backend health
+function Test-BackendHealth {
+    try {
+        $response = Invoke-WebRequest -Uri $healthCheckEndpoint -TimeoutSec 5 -UseBasicParsing
+        return $response.StatusCode -eq 200
+    }
+    catch {
+        return $false
+    }
+}
+
+# Ensure Python is available
+function Test-PythonAvailability {
+    try {
+        $pythonVersion = & python --version 2>&1
+        if ($pythonVersion -match "Python \d+\.\d+\.\d+") {
+            Write-ColorOutput "Found Python: $pythonVersion" "Green"
             return $true
         }
-        
-        # Wait a bit before checking again
-        Start-Sleep -Seconds 1
-    }
-    
-    # If we reach here, we've timed out
-    Write-Host "`n[ERROR] Timeout waiting for servers to start" -ForegroundColor $errorColor
-    return $false
-}
-
-# Open browser when servers are ready
-function Open-ApplicationInBrowser {
-    $url = "http://localhost:3000"
-    Write-Host "`n[OPEN] Opening application in browser: $url" -ForegroundColor $infoColor
-    Start-Process $url
-}
-
-# Cleanup on exit
-function Stop-AllJobs {
-    param (
-        [Parameter(Mandatory=$true)]
-        [System.Management.Automation.Job]$BackendJob,
-        
-        [Parameter(Mandatory=$true)]
-        [System.Management.Automation.Job]$FrontendJob
-    )
-    
-    Write-Host "`n[CLEANUP] Stopping all servers..." -ForegroundColor $infoColor
-    
-    # Stop all jobs
-    Stop-Job -Job $BackendJob -ErrorAction SilentlyContinue
-    Stop-Job -Job $FrontendJob -ErrorAction SilentlyContinue
-    
-    # Remove all jobs
-    Remove-Job -Job $BackendJob -Force -ErrorAction SilentlyContinue
-    Remove-Job -Job $FrontendJob -Force -ErrorAction SilentlyContinue
-    
-    Write-Host "[CLEANUP] All servers stopped" -ForegroundColor $infoColor
-}
-
-# Main execution
-try {
-    # Start the backend server
-    $backendJob = Start-BackendServer
-    
-    # Wait a moment to let backend initialize
-    Write-Host "`n[WAIT] Waiting for backend to initialize..." -ForegroundColor $infoColor
-    Start-Sleep -Seconds 5
-    
-    # Start the frontend server
-    $frontendJob = Start-FrontendServer
-    
-    # Monitor jobs
-    $success = Monitor-Jobs -BackendJob $backendJob -FrontendJob $frontendJob
-    
-    if ($success) {
-        # Open the application in browser
-        Open-ApplicationInBrowser
-        
-        # Print success message with how to stop
-        Write-Host "`n=== Servers Running Successfully ===" -ForegroundColor $infoColor
-        Write-Host "To stop the servers, press CTRL+C or close this window" -ForegroundColor $infoColor
-        Write-Host "Backend: http://localhost:8000" -ForegroundColor $backendColor
-        Write-Host "Frontend: http://localhost:3000" -ForegroundColor $frontendColor
-        Write-Host "================================================`n" -ForegroundColor $infoColor
-        
-        # Keep the script running
-        Write-Host "Press CTRL+C to stop all servers..." -ForegroundColor $infoColor
-        try {
-            while ($true) {
-                Start-Sleep -Seconds 1
-            }
-        } catch {
-            # User pressed CTRL+C
-            Write-Host "`n[STOP] User-initiated shutdown" -ForegroundColor $infoColor
+        else {
+            Write-ColorOutput "Python not found or returned unexpected output" "Red"
+            return $false
         }
     }
-} finally {
-    # Clean up
-    if ($backendJob -or $frontendJob) {
-        Stop-AllJobs -BackendJob $backendJob -FrontendJob $frontendJob
+    catch {
+        Write-ColorOutput "Python is not available in PATH. Please install Python and add it to your PATH." "Red"
+        return $false
     }
+}
+
+# Ensure Node.js is available
+function Test-NodeAvailability {
+    try {
+        $nodeVersion = & node --version 2>&1
+        if ($nodeVersion -match "v\d+\.\d+\.\d+") {
+            Write-ColorOutput "Found Node.js: $nodeVersion" "Green"
+            return $true
+        }
+        else {
+            Write-ColorOutput "Node.js not found or returned unexpected output" "Red"
+            return $false
+        }
+    }
+    catch {
+        Write-ColorOutput "Node.js is not available in PATH. Please install Node.js and add it to your PATH." "Red"
+        return $false
+    }
+}
+
+# Main execution starts here
+Write-ColorOutput "====== Starting Fake News Detection Application ======" "Cyan"
+
+# Check requirements
+if (-not (Test-PythonAvailability)) {
+    Write-ColorOutput "Python is required to run the backend server. Please install Python and try again." "Red"
+    exit 1
+}
+
+if (-not (Test-NodeAvailability)) {
+    Write-ColorOutput "Node.js is required to run the frontend server. Please install Node.js and try again." "Red"
+    exit 1
+}
+
+# Stop any processes on our ports
+Stop-ProcessOnPort $backendPort
+Stop-ProcessOnPort $frontendPort
+
+Write-ColorOutput "`n[1/3] Starting Backend Server on port $backendPort..." "Green"
+
+# Start the backend in a new PowerShell window
+$backendPath = Join-Path -Path $scriptPath -ChildPath "backend"
+$backendCmd = "cd '$backendPath'; python -m uvicorn fallback_app:app --reload --host 0.0.0.0 --port $backendPort"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
+
+Write-ColorOutput "`nWaiting for backend to initialize..." "Yellow"
+
+# Check if backend is up
+$healthy = $false
+$attempt = 1
+
+while (-not $healthy -and $attempt -le $maxAttempts) {
+    Write-ColorOutput "Checking backend health (Attempt $attempt of $maxAttempts)..." "Yellow"
     
-    Write-Host "`nAll servers have been stopped. Press any key to exit..." -ForegroundColor $infoColor
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-} 
+    if (Test-BackendHealth) {
+        $healthy = $true
+        Write-ColorOutput "Backend is running on $backendUrl" "Green"
+    }
+    else {
+        Write-ColorOutput "Backend not responsive yet. Waiting $waitTime seconds..." "Yellow"
+        Start-Sleep -Seconds $waitTime
+        $attempt++
+    }
+}
+
+if (-not $healthy) {
+    Write-ColorOutput "Backend failed to start properly. Please check for errors in the backend window." "Red"
+    Write-ColorOutput "You may need to ensure all requirements are installed: pip install -r backend/requirements.txt" "Yellow"
+    Write-ColorOutput "`nAttempting to continue with frontend startup anyway..." "Yellow"
+}
+
+Write-ColorOutput "`n[2/3] Starting Frontend Server on port $frontendPort..." "Green"
+
+# Start the frontend in a new PowerShell window
+$frontendPath = Join-Path -Path $scriptPath -ChildPath "frontend"
+$frontendCmd = "cd '$frontendPath'; npm start"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendCmd
+
+Write-ColorOutput "`nWaiting for frontend to initialize..." "Yellow"
+Start-Sleep -Seconds 10  # Increased wait time
+
+Write-ColorOutput "`n[3/3] Opening application in browser..." "Green"
+
+# Open the application in the default browser
+Start-Process $frontendUrl
+
+Write-ColorOutput "`n====== Application Started ======" "Cyan"
+Write-ColorOutput "Frontend: $frontendUrl" "Green"
+Write-ColorOutput "Backend API: $backendUrl" "Green"
+Write-ColorOutput "API Documentation: $backendUrl/docs" "Green"
+Write-ColorOutput "`nTo stop the application, close the server windows or press Ctrl+C in each window." "Yellow" 

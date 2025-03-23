@@ -1,135 +1,137 @@
-# Fake News Detection Backend
+# Fake News Detection - Backend
 
-This is the backend service for the fake news detection application, featuring enhanced text processing capabilities.
+The backend API server for the Fake News Detection system built with FastAPI.
+
+## Structure
+
+```
+backend/
+├── app/                # Core application modules
+├── models/             # Machine learning models
+├── utils/              # Utility functions
+│   ├── text_processor.py         # Basic text processing utilities
+│   ├── advanced_text_processor.py # Advanced text analysis features
+│   └── explainers.py             # Model explanation utilities
+├── tests/              # Test files
+├── history/            # Analysis history storage
+├── reports/            # Generated reports
+├── fixed_backend.py    # Main FastAPI application
+├── enhanced_predict.py # Enhanced prediction module
+├── requirements.txt    # Python dependencies
+└── app_new.py          # New application version with enhanced features
+```
 
 ## Features
 
-- Machine learning-based fake news detection
-- Detailed text analysis with linguistic feature extraction
-- Enhanced text processing with language detection
-- Entity extraction and propaganda technique detection
-- Model explanations using LIME and SHAP
-- Comprehensive text analysis with readability metrics
-- API for frontend integration
+### Core Features
 
-## Installation
+- Fake news detection with machine learning
+- Text preprocessing and feature extraction
+- Model explainability with LIME and SHAP
+- REST API for frontend integration
+- Analysis history tracking
 
-### Prerequisites
+### Enhanced Text Processing
 
-- Python 3.8+
-- pip (Python package manager)
-- Virtual environment (recommended)
+1. **Language Detection**
+   - Automatic identification of text language
+   - Confidence scoring for detection
 
-### Setup Instructions
+2. **Entity Extraction**
+   - Identification of named entities (people, organizations, locations)
+   - Entity counting and categorization
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd <repository-folder>/backend
-```
+3. **Readability Metrics**
+   - Flesch Reading Ease score
+   - Grade level assessment
+   - Multiple readability indices
 
-2. Create and activate a virtual environment:
-```bash
-# On Windows
-python -m venv venv
-venv\Scripts\activate
+4. **Text Uniqueness Analysis**
+   - Lexical diversity measurement
+   - Content density analysis
 
-# On macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Download required NLTK data:
-```bash
-python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('wordnet'); nltk.download('maxent_ne_chunker'); nltk.download('words'); nltk.download('averaged_perceptron_tagger')"
-```
-
-## Running the Application
-
-Start the backend server:
-
-```bash
-python app_new.py
-```
-
-By default, the API will be available at http://localhost:8000.
-
-## API Documentation
-
-Once the server is running, access the API documentation at:
-
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## Testing Enhanced Features
-
-To test the enhanced text processing features:
-
-```bash
-python test_enhanced_processing.py
-```
-
-This will run a series of tests demonstrating language detection, entity extraction, readability metrics, propaganda detection, and the overall enhanced analysis capabilities.
+5. **Propaganda Technique Detection**
+   - Identification of common propaganda techniques
+   - Overall propaganda scoring
 
 ## API Endpoints
 
-### Main Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API information |
+| `/health` | GET | Health check |
+| `/analyze` | POST | Basic fake news analysis |
+| `/analyze/enhanced` | POST | Enhanced analysis with additional features |
+| `/explain/methods` | GET | List available explanation methods |
+| `/explain` | POST | Generate explanation for prediction |
+| `/history` | GET | Retrieve analysis history |
+| `/history/{item_id}` | GET | Get specific history item |
+| `/detect-language` | POST | Detect language of provided text |
+| `/analyze/comprehensive` | POST | Comprehensive text analysis |
 
-- `POST /analyze`: Analyze text with standard features
-- `POST /analyze/enhanced`: Analyze text with enhanced features
-- `POST /analyze/comprehensive`: Perform comprehensive text analysis
-- `POST /detect-language`: Detect the language of text
+## Setup Instructions
 
-### History and Reports
+1. Create a virtual environment (recommended):
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-- `GET /history`: Get all analysis history
-- `GET /history/{id}`: Get specific history item
-- `GET /reports`: Get all saved reports
-- `GET /reports/{id}`: Get specific report
-- `DELETE /history/{id}`: Delete history item
-- `DELETE /reports/{id}`: Delete report
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
-### Explanations
+3. Run the server:
+   ```
+   python -m uvicorn fixed_backend:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-- `POST /explain`: Get model explanations for text
+   Or use:
+   ```
+   python -m uvicorn app_new:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-## Enhanced Features Documentation
+The API will be available at [http://localhost:8000](http://localhost:8000).
 
-For detailed information about the enhanced text processing features, see [ENHANCED-FEATURES.md](ENHANCED-FEATURES.md).
+## API Documentation
+
+API documentation is automatically generated and available at:
+
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+## Testing
+
+To run tests for the enhanced features:
+
+```
+python test_enhanced_processing.py
+```
+
+## Environment Variables
+
+The following environment variables can be configured:
+
+- `DEBUG_MODE`: Enable debug mode (default: False)
+- `MODEL_PATH`: Path to the trained model file
+- `LOG_LEVEL`: Logging level (default: "INFO")
+
+## Development Notes
+
+- The backend uses FastAPI for high performance
+- CORS is enabled for frontend integration
+- The server automatically creates required directories on startup
+- Model files are expected in the `models/` directory
 
 ## Troubleshooting
 
-### Common Issues
+1. If the server fails to start:
+   - Check that dependencies are installed correctly
+   - Ensure required model files are in place
+   - Verify port 8000 is not in use by another application
 
-1. **Missing NLTK Data**
-   
-   If you encounter errors related to missing NLTK data, run:
-   ```python
-   import nltk
-   nltk.download('punkt')
-   nltk.download('stopwords')
-   nltk.download('wordnet')
-   nltk.download('maxent_ne_chunker')
-   nltk.download('words')
-   nltk.download('averaged_perceptron_tagger')
-   ```
-
-2. **Model Not Found**
-   
-   Make sure the models directory exists and contains the required model files. Default model path is `models/improved_fake_news_model.pkl`.
-
-3. **Package Dependencies**
-   
-   If you encounter package-related errors, try:
-   ```bash
-   pip install -r requirements.txt --upgrade
-   ```
-
-## License
-
-[MIT License](LICENSE) 
+2. If API requests fail:
+   - Check the server logs for error messages
+   - Verify the request format and parameters
+   - Ensure CORS settings are properly configured 

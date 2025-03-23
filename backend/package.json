@@ -1,0 +1,19 @@
+{
+  "name": "fake-news-detector-backend",
+  "version": "1.0.0",
+  "description": "Backend for Fake News Detection System",
+  "main": "fallback_app.py",
+  "scripts": {
+    "start": "python -m uvicorn fallback_app:app --host 0.0.0.0 --port 8001",
+    "dev": "python -m uvicorn fallback_app:app --reload --host 0.0.0.0 --port 8001",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "fake-news",
+    "fastapi",
+    "python",
+    "machine-learning"
+  ],
+  "author": "",
+  "license": "ISC"
+} 

@@ -1,6 +1,107 @@
-# Fake News Detection Frontend
+# Fake News Detection - Frontend
 
-This React frontend application provides a user interface for the fake news detection system, including visualizations for model explanations using LIME and SHAP.
+The frontend application for the Fake News Detection system built with React.
+
+## Structure
+
+```
+frontend/
+├── public/               # Static assets
+├── src/                  # Source code
+│   ├── components/       # Reusable React components
+│   │   ├── layouts/      # Layout components
+│   │   └── ...           # Other components
+│   ├── api/              # API integration functions
+│   ├── context/          # React context providers
+│   ├── pages/            # Page components
+│   ├── utils/            # Utility functions
+│   ├── assets/           # Images, fonts, etc.
+│   ├── App.js            # Main application component
+│   ├── index.js          # Application entry point
+│   └── config.js         # Application configuration
+├── package.json          # Dependencies and scripts
+└── vite.config.js        # Vite configuration
+```
+
+## Features
+
+- User-friendly interface for fake news detection
+- Text input form with analysis options
+- Detailed analysis results with visualizations
+- Enhanced analysis capabilities
+- API connection status monitoring
+- Responsive design for mobile and desktop
+
+## Configuration
+
+The frontend communicates with the backend API. You can configure the API URL and endpoints in `src/config.js`:
+
+```javascript
+// Configuration for the frontend application
+const config = {
+  // Backend API URL
+  apiUrl: 'http://localhost:8000',
+  
+  // API endpoints
+  endpoints: {
+    analyze: '/analyze',
+    enhancedAnalyze: '/analyze/enhanced',
+    history: '/history',
+    health: '/health',
+    explain: '/explain'
+  },
+  
+  // Default request timeout in milliseconds
+  timeout: 30000
+};
+
+export default config;
+```
+
+## Available Scripts
+
+In the project directory, you can run:
+
+### `npm install`
+
+Installs the dependencies required for the application.
+
+### `npm start`
+
+Runs the app in development mode.\
+Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+
+The page will reload if you make edits.\
+You will also see any lint errors in the console.
+
+### `npm run build`
+
+Builds the app for production to the `dist` folder.\
+It correctly bundles React in production mode and optimizes the build for the best performance.
+
+## Dependencies
+
+Major dependencies include:
+
+- **React**: UI library
+- **Axios**: HTTP client for API requests
+- **React Router**: Navigation and routing
+- **Tailwind CSS**: Utility-first CSS framework for styling
+
+## Development Notes
+
+- Ensure the backend server is running before starting the frontend
+- The application uses environment variables for configuration
+- Component styling uses CSS modules to avoid style conflicts
+
+## Troubleshooting
+
+If you encounter API connection issues:
+
+1. Check if the backend server is running
+2. Verify the API URL in `src/config.js`
+3. Look for CORS issues in browser developer tools
+4. Ensure the correct API endpoints are being used
 
 ## Model Explainability Features
 

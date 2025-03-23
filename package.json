@@ -3,17 +3,20 @@
   "version": "1.0.0",
   "description": "Fake News Detection System",
   "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "dev:frontend": "cd frontend && npm run dev",
-    "start:backend": "cd backend && python app_new.py",
-    "start": "concurrently \"npm run dev:frontend\" \"npm run start:backend\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" --names \"backend,frontend\" --prefix-colors \"blue,green\"",
+    "dev:frontend": "cd frontend && react-scripts start",
+    "dev:backend": "cd backend && python -m uvicorn fallback_app:app --reload --host 0.0.0.0 --port 8001",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" --names \"backend,frontend\" --prefix-colors \"blue,green\"",
+    "start:frontend": "cd frontend && react-scripts start",
+    "start:backend": "cd backend && python -m uvicorn fallback_app:app --host 0.0.0.0 --port 8001",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
   "keywords": [
     "fake-news",
     "machine-learning",
     "react",
-    "flask"
+    "fastapi"
   ],
   "author": "",
   "license": "ISC",

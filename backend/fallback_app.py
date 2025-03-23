@@ -1,47 +1,41 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
 import random
-import json
 import os
+import json
 from datetime import datetime
-import uvicorn
-import nltk
-from utils.text_processor import preprocess_text
 
-# Download NLTK data if needed
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('punkt')
-    nltk.download('stopwords')
-
+# Create FastAPI app
 app = FastAPI(
-    title="Fake News Detection API",
-    description="API for fake news detection with enhanced text processing features",
-    version="3.0.0",
+    title="Fake News Detection API (Fallback)",
+    description="Simplified API for testing the frontend connection",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
-# Add CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+    expose_headers=["Content-Type", "X-API-Key"]
 )
 
-# Ensure directories exist
-os.makedirs("reports", exist_ok=True)
+# Ensure required directories exist
 os.makedirs("history", exist_ok=True)
-os.makedirs("models", exist_ok=True)
+os.makedirs("reports", exist_ok=True)
 
 # Models
 class TextRequest(BaseModel):
     text: str
     explain: bool = False
-    history_id: str = None
+    history_id: Optional[str] = None
 
 class TextResult(BaseModel):
     prediction: float
@@ -49,185 +43,140 @@ class TextResult(BaseModel):
     confidence: float
     id: str
     timestamp: str
-    text_length: int
-    processed_text: str
+    processed_text: Optional[str] = None
+    text_length: Optional[int] = None
 
-class EnhancedAnalysisResult(BaseModel):
-    prediction: float
-    label: str
-    confidence: float
-    language: dict = None
-    entities: dict = None
-    readability: dict = None
-    uniqueness: dict = None
-    propaganda: dict = None
-    
-# Routes
+class ExplainRequest(BaseModel):
+    text: str
+    method: str = "lime"
+
+# Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
     return {
-        "name": "Fake News Detection API",
-        "version": "3.0.0",
-        "status": "operational"
+        "service": "Fake News Detection API (Fallback)",
+        "version": "1.0.0", 
+        "status": "ok",
+        "endpoints": ["/analyze", "/analyze/enhanced", "/health", "/history", "/explain", "/explain/methods", "/detect-language"]
     }
 
+# Health check endpoint
 @app.get("/health")
-async def health():
-    """Health check endpoint"""
-    return {"status": "ok"}
+async def health_check():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
-@app.post("/analyze")
+# Analyze endpoint - generates mock predictions
+@app.post("/analyze", response_model=TextResult)
 async def analyze_text(request: TextRequest):
-    """Analyze text for fake news likelihood"""
-    try:
-        # Simple fallback analysis
-        text = request.text
-        processed = preprocess_text(text)
-        
-        # Generate random ID for result
-        result_id = f"analysis_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
-        
-        # Get text stats
-        word_count = len(text.split())
-        
-        # Placeholder prediction (would use ML model in real version)
-        # Generate a consistent score for the same text
-        import hashlib
-        text_hash = int(hashlib.md5(text.encode()).hexdigest(), 16)
-        prediction = (text_hash % 100) / 100
-        
-        # Classify
-        label = "FAKE" if prediction > 0.5 else "REAL"
-        confidence = max(prediction, 1 - prediction)
-        
-        # Create result
-        result = TextResult(
-            prediction=prediction,
-            label=label,
-            confidence=confidence,
-            id=result_id,
-            timestamp=datetime.now().isoformat(),
-            text_length=len(text),
-            processed_text=processed[:100] + "..." if len(processed) > 100 else processed
-        )
-        
-        # Save to history
-        history_path = os.path.join("history", f"{result_id}.json")
-        with open(history_path, "w") as f:
-            json.dump(result.model_dump(), f)
-            
-        return result
+    # Mock processing
+    text = request.text
     
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+    # Generate a random prediction for testing
+    prediction = random.random()
+    label = "FAKE" if prediction > 0.5 else "REAL"
+    confidence = max(0.5, prediction) if label == "FAKE" else max(0.5, 1 - prediction)
+    
+    # Generate a unique ID
+    item_id = f"test-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
+    
+    # Process the text (simple simulation)
+    processed_text = text.lower()[:100] + "..." if len(text) > 100 else text.lower()
+    
+    # Prepare result
+    result = {
+        "prediction": prediction,
+        "label": label,
+        "confidence": confidence,
+        "id": item_id,
+        "timestamp": datetime.now().isoformat(),
+        "processed_text": processed_text,
+        "text_length": len(text)
+    }
+    
+    # Save to history
+    history_path = os.path.join("history", f"{item_id}.json")
+    with open(history_path, "w") as f:
+        json.dump({
+            "request": {"text": text},
+            "result": result
+        }, f)
+    
+    return result
 
+# Enhanced analysis endpoint - mock implementation
 @app.post("/analyze/enhanced")
 async def enhanced_analysis(request: TextRequest):
-    """Enhanced analysis with additional text processing features"""
-    try:
-        # Basic analysis
-        text = request.text
-        processed = preprocess_text(text)
-        
-        # Generate random ID
-        result_id = f"enhanced_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
-        
-        # Placeholder prediction
-        import hashlib
-        text_hash = int(hashlib.md5(text.encode()).hexdigest(), 16)
-        prediction = (text_hash % 100) / 100
-        
-        # Classify
-        label = "FAKE" if prediction > 0.5 else "REAL"
-        confidence = max(prediction, 1 - prediction)
-        
-        # Enhanced features (simplified version)
-        # Language detection
-        language = {
+    # Mock processing
+    text = request.text
+    
+    # Generate a random prediction
+    prediction = random.random()
+    label = "FAKE" if prediction > 0.5 else "REAL"
+    confidence = max(0.5, prediction) if label == "FAKE" else max(0.5, 1 - prediction)
+    
+    # Generate a unique ID
+    item_id = f"test-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
+    
+    # Process the text (simple simulation)
+    processed_text = text.lower()[:100] + "..." if len(text) > 100 else text.lower()
+    
+    # Save to history
+    result = {
+        "prediction": prediction,
+        "label": label,
+        "confidence": confidence,
+        "id": item_id,
+        "timestamp": datetime.now().isoformat(),
+        "processed_text": processed_text,
+        "text_length": len(text),
+        "language": {
             "language_code": "en",
             "language_name": "English",
             "confidence": 0.98,
             "supported": True
-        }
-        
-        # Entity extraction
-        entities = {
+        },
+        "entities": {
             "entities": {
-                "PERSON": text.count("Trump") + text.count("Biden") + text.count("Obama"),
-                "ORG": text.count("CNN") + text.count("Fox") + text.count("BBC"),
-                "GPE": text.count("America") + text.count("US") + text.count("Russia")
+                "PERSON": 2,
+                "ORG": 3,
+                "GPE": 1
             },
-            "entity_count": text.count("Trump") + text.count("Biden") + text.count("Obama") + 
-                          text.count("CNN") + text.count("Fox") + text.count("BBC") +
-                          text.count("America") + text.count("US") + text.count("Russia")
-        }
-        
-        # Readability metrics
-        words = len(text.split())
-        sentences = text.count('.') + text.count('!') + text.count('?')
-        sentences = max(1, sentences)
-        readability = {
-            "flesch_reading_ease": 100 - (words / sentences),
-            "flesch_kincaid_grade": (0.39 * words / sentences) + 11.8,
-            "gunning_fog": 0.4 * (words / sentences),
-            "coleman_liau_index": 5.89 * (len(text) / words) - 29.5,
-            "average_grade_level": 10.5
-        }
-        
-        # Text uniqueness
-        unique_words = len(set(text.lower().split()))
-        total_words = len(text.split())
-        uniqueness = {
-            "unique_words_ratio": unique_words / max(1, total_words),
-            "lexical_diversity": unique_words / max(1, total_words),
-            "content_hash": hashlib.md5(text.encode()).hexdigest()
-        }
-        
-        # Propaganda techniques
-        propaganda = {
+            "entity_count": 6
+        },
+        "readability": {
+            "flesch_reading_ease": 65.2,
+            "flesch_kincaid_grade": 8.7,
+            "smog_index": 9.2,
+            "gunning_fog": 10.1,
+            "coleman_liau_index": 9.8,
+            "average_grade_level": 9.3
+        },
+        "uniqueness": {
+            "lexical_diversity": 0.76,
+            "unique_words_ratio": 0.68,
+            "content_hash": "abcdef1234567890"
+        },
+        "propaganda": {
             "techniques": {
-                "name_calling": text.lower().count("fake") + text.lower().count("corrupt"),
-                "exaggeration": text.lower().count("very") + text.lower().count("huge"),
-                "loaded_language": text.lower().count("disaster") + text.lower().count("terrible")
+                "name_calling": 1,
+                "exaggeration": 2,
+                "loaded_language": 1
             },
-            "propaganda_score": (text.lower().count("fake") + text.lower().count("corrupt") +
-                               text.lower().count("very") + text.lower().count("huge") +
-                               text.lower().count("disaster") + text.lower().count("terrible")) / max(1, len(text.split())) * 100
+            "propaganda_score": 45.0
         }
-        
-        # Create enhanced result
-        result = EnhancedAnalysisResult(
-            prediction=prediction,
-            label=label,
-            confidence=confidence,
-            language=language,
-            entities=entities,
-            readability=readability,
-            uniqueness=uniqueness,
-            propaganda=propaganda
-        )
-        
-        # Save to history
-        history_path = os.path.join("history", f"{result_id}.json")
-        with open(history_path, "w") as f:
-            json.dump(result.model_dump(), f)
-            
-        return result
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Enhanced analysis failed: {str(e)}")
-
-@app.get("/detect-language")
-async def detect_language(text: str):
-    """Detect the language of the input text"""
-    return {
-        "language_code": "en",
-        "language_name": "English",
-        "confidence": 0.98,
-        "supported": True
     }
+    
+    # Save to history
+    history_path = os.path.join("history", f"{item_id}.json")
+    with open(history_path, "w") as f:
+        json.dump({
+            "request": {"text": text},
+            "result": result
+        }, f)
+    
+    return result
 
+# Get history endpoint
 @app.get("/history")
 async def get_history():
     """Get analysis history"""
@@ -236,11 +185,28 @@ async def get_history():
         for filename in os.listdir("history"):
             if filename.endswith(".json"):
                 with open(os.path.join("history", filename), "r") as f:
-                    history.append(json.load(f))
+                    data = json.load(f)
+                    history.append(data.get("result", {}))
         return history
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve history: {str(e)}")
 
+# Get specific history item
+@app.get("/history/{item_id}")
+async def get_history_item(item_id: str):
+    """Get specific history item"""
+    try:
+        file_path = os.path.join("history", f"{item_id}.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                data = json.load(f)
+                return data.get("result", {})
+        else:
+            raise HTTPException(status_code=404, detail=f"History item {item_id} not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve history item: {str(e)}")
+
+# Explain methods endpoint
 @app.get("/explain/methods")
 async def explain_methods():
     """Return explanation methods"""
@@ -251,8 +217,37 @@ async def explain_methods():
         ]
     }
 
+# Explain endpoint
+@app.post("/explain")
+async def explain_prediction(request: ExplainRequest):
+    """Mock implementation of explanation endpoint"""
+    return {
+        "method": request.method,
+        "text": request.text,
+        "explanation": {
+            "features": [
+                {"word": "fake", "importance": 0.42, "direction": "positive"},
+                {"word": "claim", "importance": 0.38, "direction": "positive"},
+                {"word": "source", "importance": 0.35, "direction": "negative"},
+                {"word": "according", "importance": 0.29, "direction": "negative"},
+                {"word": "experts", "importance": 0.27, "direction": "negative"}
+            ],
+            "summary": "The words 'fake' and 'claim' contributed most to the prediction."
+        }
+    }
+
+# Language detection endpoint
+@app.get("/detect-language")
+async def detect_language(text: str):
+    """Detect the language of the input text"""
+    return {
+        "language_code": "en",
+        "language_name": "English",
+        "confidence": 0.98,
+        "supported": True
+    }
+
+# Run the server
 if __name__ == "__main__":
-    # Run the server
-    print("Starting Fake News Detection Backend Server...")
-    # Use port 8001 to avoid conflict with the test server
-    uvicorn.run(app, host="0.0.0.0", port=8001) 
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000) 
