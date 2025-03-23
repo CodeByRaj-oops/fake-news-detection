@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fake News Detection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .feature {
+            background-color: #f9f9f9;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .sample {
+            font-style: italic;
+            color: #555;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Text Processing Features</h1>
+    
+    <p>This page demonstrates the enhanced text processing features available in the Fake News Detection system.</p>
+    
+    <div class="feature">
+        <h2>1. Language Detection</h2>
+        <p>The system can automatically identify the language of input text.</p>
+        <div class="sample">
+            Example: "This is a sample text in English language for testing purposes."
+        </div>
+        <pre>
+{
+  "language_code": "en",
+  "language_name": "English",
+  "confidence": 0.95,
+  "supported": true
+}
+        </pre>
+    </div>
+    
+    <div class="feature">
+        <h2>2. Entity Extraction</h2>
+        <p>Identifies named entities such as people, organizations, and locations.</p>
+        <div class="sample">
+            Example: "The President of the United States, Joe Biden, visited Berlin, Germany last week."
+        </div>
+        <pre>
+{
+  "entities": {
+    "PERSON": 1,
+    "GPE": 2,
+    "DATE": 1,
+    "ORG": 1
+  },
+  "entity_count": 5
+}
+        </pre>
+    </div>
+    
+    <div class="feature">
+        <h2>3. Readability Metrics</h2>
+        <p>Calculates standardized readability scores to assess text complexity.</p>
+        <div class="sample">
+            Example: "The analysis of various textual features can reveal patterns associated with fake news."
+        </div>
+        <pre>
+{
+  "flesch_reading_ease": 42.31,
+  "flesch_kincaid_grade": 12.84,
+  "gunning_fog": 14.53,
+  "smog_index": 10.62,
+  "coleman_liau_index": 12.57,
+  "automated_readability_index": 13.92,
+  "average_grade_level": 12.9
+}
+        </pre>
+    </div>
+    
+    <div class="feature">
+        <h2>4. Text Uniqueness Analysis</h2>
+        <p>Measures lexical diversity and content uniqueness.</p>
+        <div class="sample">
+            Example: "The quick brown fox jumps over the lazy dog."
+        </div>
+        <pre>
+{
+  "unique_words_ratio": 1.0,
+  "lexical_diversity": 1.0,
+  "content_hash": "9e107d9d372bb6826bd81d3542a419d6"
+}
+        </pre>
+    </div>
+    
+    <div class="feature">
+        <h2>5. Propaganda Technique Detection</h2>
+        <p>Identifies common propaganda techniques in text.</p>
+        <div class="sample">
+            Example: "SHOCKING NEWS! The radical left doesn't want you to know this INCREDIBLE truth."
+        </div>
+        <pre>
+{
+  "techniques": {
+    "name_calling": 1,
+    "exaggeration": 2,
+    "card_stacking": 1
+  },
+  "propaganda_score": 28.57
+}
+        </pre>
+    </div>
+    
+    <h2>How to Use the API</h2>
+    <p>To access these features, use the following API endpoints:</p>
+    <ul>
+        <li><code>/analyze/enhanced</code> - Full analysis with enhanced features</li>
+        <li><code>/detect-language</code> - Language detection only</li>
+        <li><code>/analyze/comprehensive</code> - Comprehensive text analysis</li>
+    </ul>
+    
+    <p>For full API documentation, visit <a href="http://localhost:8000/docs">http://localhost:8000/docs</a> when the server is running.</p>
+</body>
+</html> 

@@ -37,5 +37,13 @@ xgboost>=1.7.4,<1.8.0
 transformers>=4.28.1,<4.29.0
 langdetect>=1.0.9,<1.1.0
 
+# New packages for enhanced text processing
+textstat>=0.7.3,<0.8.0
+spacy>=3.7.2,<3.8.0
+wordcloud>=1.9.2,<2.0.0
+
+# Language support
+python-Levenshtein>=0.23.0,<0.24.0
+
 # New packages
 pylint>=2.17.0,<2.18.0 

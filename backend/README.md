@@ -1,84 +1,135 @@
 # Fake News Detection Backend
 
-This backend provides a FastAPI server for fake news detection with model explanations using LIME and SHAP.
+This is the backend service for the fake news detection application, featuring enhanced text processing capabilities.
 
-## Model Explainability
+## Features
 
-The system now supports model explanations using two interpretability methods:
+- Machine learning-based fake news detection
+- Detailed text analysis with linguistic feature extraction
+- Enhanced text processing with language detection
+- Entity extraction and propaganda technique detection
+- Model explanations using LIME and SHAP
+- Comprehensive text analysis with readability metrics
+- API for frontend integration
 
-### LIME (Local Interpretable Model-agnostic Explanations)
+## Installation
 
-LIME works by perturbing the input data and observing how the predictions change. It creates a simpler interpretable model around the instance being explained to understand which features contribute most to the prediction.
+### Prerequisites
 
-Benefits:
-- Model-agnostic: Works with any model (SVM, Random Forest, Neural Networks, etc.)
-- Intuitive: Shows which words contribute to or against a specific prediction
-- Local fidelity: Accurate for explaining individual predictions
+- Python 3.8+
+- pip (Python package manager)
+- Virtual environment (recommended)
 
-### SHAP (SHapley Additive exPlanations)
+### Setup Instructions
 
-SHAP uses concepts from game theory to assign each feature an importance value for a particular prediction. It calculates Shapley values which represent the contribution of each feature to the difference between the actual prediction and the average prediction.
-
-Benefits:
-- Solid theoretical foundation in game theory
-- Consistency: Provides consistent explanations
-- Global insights: Can be aggregated to understand overall model behavior
-
-## API Endpoints
-
-### Analysis with Explanations
-
-```
-POST /analyze
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <repository-folder>/backend
 ```
 
-Request body:
-```json
-{
-  "text": "Text to analyze...",
-  "detailed": true,
-  "save_report": false,
-  "explain": true,
-  "explanation_method": "lime",  // Options: "lime", "shap", or "both"
-  "num_features": 10
-}
+2. Create and activate a virtual environment:
+```bash
+# On Windows
+python -m venv venv
+venv\Scripts\activate
+
+# On macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-### Direct Explanation Endpoint
-
-```
-POST /explain
-```
-
-Request body:
-```json
-{
-  "text": "Text to explain...",
-  "method": "lime",  // Options: "lime", "shap", or "both"
-  "num_features": 10
-}
-```
-
-### Available Explanation Methods
-
-```
-GET /explain/methods
-```
-
-Returns available explanation methods and descriptions.
-
-## Setup
-
-1. Install dependencies:
-```
+3. Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
-2. Run the server:
-```
-uvicorn app_new:app --reload
+4. Download required NLTK data:
+```bash
+python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('wordnet'); nltk.download('maxent_ne_chunker'); nltk.download('words'); nltk.download('averaged_perceptron_tagger')"
 ```
 
-## Integration with Frontend
+## Running the Application
 
-The frontend calls these endpoints to generate and display explanations for predictions, showing users which words and phrases most influenced the model's decision. 
+Start the backend server:
+
+```bash
+python app_new.py
+```
+
+By default, the API will be available at http://localhost:8000.
+
+## API Documentation
+
+Once the server is running, access the API documentation at:
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## Testing Enhanced Features
+
+To test the enhanced text processing features:
+
+```bash
+python test_enhanced_processing.py
+```
+
+This will run a series of tests demonstrating language detection, entity extraction, readability metrics, propaganda detection, and the overall enhanced analysis capabilities.
+
+## API Endpoints
+
+### Main Endpoints
+
+- `POST /analyze`: Analyze text with standard features
+- `POST /analyze/enhanced`: Analyze text with enhanced features
+- `POST /analyze/comprehensive`: Perform comprehensive text analysis
+- `POST /detect-language`: Detect the language of text
+
+### History and Reports
+
+- `GET /history`: Get all analysis history
+- `GET /history/{id}`: Get specific history item
+- `GET /reports`: Get all saved reports
+- `GET /reports/{id}`: Get specific report
+- `DELETE /history/{id}`: Delete history item
+- `DELETE /reports/{id}`: Delete report
+
+### Explanations
+
+- `POST /explain`: Get model explanations for text
+
+## Enhanced Features Documentation
+
+For detailed information about the enhanced text processing features, see [ENHANCED-FEATURES.md](ENHANCED-FEATURES.md).
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Missing NLTK Data**
+   
+   If you encounter errors related to missing NLTK data, run:
+   ```python
+   import nltk
+   nltk.download('punkt')
+   nltk.download('stopwords')
+   nltk.download('wordnet')
+   nltk.download('maxent_ne_chunker')
+   nltk.download('words')
+   nltk.download('averaged_perceptron_tagger')
+   ```
+
+2. **Model Not Found**
+   
+   Make sure the models directory exists and contains the required model files. Default model path is `models/improved_fake_news_model.pkl`.
+
+3. **Package Dependencies**
+   
+   If you encounter package-related errors, try:
+   ```bash
+   pip install -r requirements.txt --upgrade
+   ```
+
+## License
+
+[MIT License](LICENSE) 
