@@ -5,34 +5,11 @@ import {
   ShieldCheckIcon, 
   CodeBracketIcon, 
   AcademicCapIcon,
-  BookOpenIcon,
-  UserGroupIcon
+  BookOpenIcon
 } from '@heroicons/react/24/outline';
 
 function AboutPage() {
-  // Team members data
-  const team = [
-    {
-      name: 'Dr. Sarah Johnson',
-      role: 'NLP Specialist',
-      bio: 'PhD in Computational Linguistics with 10+ years of experience in developing language understanding systems.'
-    },
-    {
-      name: 'Michael Chen',
-      role: 'Machine Learning Engineer',
-      bio: 'Expert in training and fine-tuning deep learning models for text classification and information extraction.'
-    },
-    {
-      name: 'Amanda Rodriguez',
-      role: 'Media Researcher',
-      bio: 'Specialized in identifying misinformation patterns and building fact-checking datasets.'
-    },
-    {
-      name: 'David Kim',
-      role: 'Full Stack Developer',
-      bio: 'Responsible for building the web platform that makes our powerful algorithms accessible to everyone.'
-    }
-  ];
+  // Team members data removed
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-16">
@@ -44,7 +21,7 @@ function AboutPage() {
             About Our Fake News Detection System
           </h1>
           <p className="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
-            Learn about our mission, technology, and the team behind the platform.
+            Learn about our mission and technology behind the platform.
           </p>
         </div>
 
@@ -127,33 +104,7 @@ function AboutPage() {
         </div>
       </div>
 
-      {/* Our team section */}
-      <div>
-        <div className="text-center mb-8">
-          <UserGroupIcon className="h-12 w-12 text-indigo-600 mx-auto" />
-          <h2 className="mt-2 text-2xl font-bold text-gray-900">Our Team</h2>
-          <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-500">
-            Meet the experts behind our fake news detection platform.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {team.map((member, index) => (
-            <div key={index} className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="text-center">
-                  <div className="h-20 w-20 rounded-full bg-indigo-100 mx-auto flex items-center justify-center">
-                    <UserGroupIcon className="h-10 w-10 text-indigo-600" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-medium text-gray-900">{member.name}</h3>
-                  <p className="text-sm font-medium text-indigo-600">{member.role}</p>
-                  <p className="mt-2 text-sm text-gray-500">{member.bio}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Our team section removed */}
 
       {/* FAQs section */}
       <div>

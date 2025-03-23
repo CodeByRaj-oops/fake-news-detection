@@ -57,5 +57,5 @@
     "postcss": "^8.4.31",
     "vite": "^4.5.9"
   },
-  "proxy": "http://localhost:8000"
+  "proxy": "http://localhost:8001"
 }

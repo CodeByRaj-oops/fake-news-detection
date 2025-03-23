@@ -16,6 +16,9 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.pipeline import Pipeline
+import pickle
+import uuid
+from typing import Dict, Any, List, Optional, Union, Tuple
 
 # Add parent directory to path to allow imports
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +37,7 @@ from utils.advanced_text_processor import (
     detect_propaganda_techniques,
     comprehensive_text_analysis
 )
+from utils.text_processor import analyze_text_features, detect_clickbait
 
 # Import explainer utilities
 try:
@@ -41,7 +45,9 @@ try:
         ModelExplainer,
         explain_with_lime,
         explain_with_shap,
-        get_combined_explanation
+        get_combined_explanation,
+        generate_lime_explanation,
+        generate_shap_explanation
     )
     EXPLAINERS_AVAILABLE = True
 except ImportError:
@@ -61,421 +67,392 @@ MODELS_DIR = os.path.join(script_dir, 'models')
 REPORTS_DIR = os.path.join(script_dir, 'reports')
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
+# Model paths
+MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+VECTORIZER_PATH = os.path.join(MODEL_DIR, 'vectorizer.pkl')
+MODEL_PATH = os.path.join(MODEL_DIR, 'model.pkl')
+
+# Ensure directories exist
+os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'history'), exist_ok=True)
+
 class EnhancedFakeNewsDetector:
     """
     Enhanced fake news detection with comprehensive analysis, language detection,
     entity recognition, and more detailed text analysis.
     """
     
-    def __init__(self, model_path=None):
+    def __init__(self):
         """
-        Initialize the detector with a trained model.
-        
-        Args:
-            model_path (str): Path to the trained model file
+        Initialize the detector with models
         """
-        if model_path is None:
-            # Use default model path
-            model_path = os.path.join(MODELS_DIR, 'improved_fake_news_model.pkl')
-        
         try:
-            logger.info(f"Loading model from {model_path}")
-            self.model = joblib.load(model_path)
-            logger.info("Model loaded successfully")
+            # Load vectorizer
+            with open(VECTORIZER_PATH, 'rb') as f:
+                self.vectorizer = pickle.load(f)
+                
+            # Load model
+            with open(MODEL_PATH, 'rb') as f:
+                self.model = pickle.load(f)
+                
+            self.loaded = True
             
             # Initialize explainer if available
             self.explainer = None
             if EXPLAINERS_AVAILABLE:
                 self.explainer = ModelExplainer(self.model)
                 logger.info("Model explainer initialized")
-        except Exception as e:
-            logger.error(f"Error loading model: {e}")
-            self.model = None
+        except (FileNotFoundError, OSError, pickle.PickleError) as e:
+            print(f"Error loading models: {e}")
+            self.loaded = False
             self.explainer = None
             
-    def predict(self, text, detailed=False, explain=False, explanation_method="lime", num_features=10, comprehensive=False):
+    def predict(self, text: str, explain: bool = False, explanation_method: str = 'lime') -> Dict[str, Any]:
         """
-        Predict whether a text is fake or real news with enhanced analysis.
+        Predict if text is fake news
         
         Args:
-            text (str): Input text
-            detailed (bool): Whether to return detailed analysis
-            explain (bool): Whether to return model explanations
-            explanation_method (str): Method for explanations ('lime', 'shap', or 'both')
-            num_features (int): Number of features to include in explanations
-            comprehensive (bool): Whether to perform comprehensive analysis
+            text (str): Input text to analyze
+            explain (bool): Whether to include explanation
+            explanation_method (str): Method for generating explanation (lime or shap)
             
         Returns:
-            dict: Prediction results
+            Dict[str, Any]: Prediction results
         """
+        if not self.loaded:
+            return {"error": "Model not loaded properly"}
+        
         if not text or not isinstance(text, str):
-            return {
-                'error': 'Invalid input text',
-                'prediction': 'Unknown',
-                'confidence': 0.0,
-                'timestamp': datetime.now().isoformat()
-            }
+            return {"error": "Invalid text input"}
         
-        if self.model is None:
-            return {
-                'error': 'Model not loaded',
-                'prediction': 'Unknown',
-                'confidence': 0.0,
-                'timestamp': datetime.now().isoformat()
-            }
+        # Generate a unique ID for this prediction
+        item_id = str(uuid.uuid4())
         
-        try:
-            # Detect language
-            language_info = detect_language(text)
-            
-            # Only proceed with analysis if the text is in English
-            # This prevents incorrect analysis of non-English content
-            if language_info['language_code'] != 'en' and language_info['confidence'] > 0.8:
-                return {
-                    'error': f"Non-English text detected ({language_info['language_name']}). Current model only supports English.",
-                    'prediction': 'Unsupported Language',
-                    'confidence': 0.0,
-                    'language': language_info,
-                    'timestamp': datetime.now().isoformat()
-                }
-            
-            # Preprocess the text
-            processed_text = preprocess_text(text)
-            
-            # Make prediction
-            label_probabilities = self.model.predict_proba([processed_text])[0]
-            prediction_idx = np.argmax(label_probabilities)
-            confidence = label_probabilities[prediction_idx]
-            
-            # Convert prediction index to label
-            labels = self.model.classes_
-            prediction = labels[prediction_idx]
-            
-            # Prepare base result
-            result = {
-                'prediction': prediction,
-                'confidence': float(confidence),
-                'language': language_info,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            # Add comprehensive analysis if requested
-            if comprehensive:
-                # Use the comprehensive analysis function that includes all features
-                analysis_result = comprehensive_text_analysis(text)
-                result['comprehensive_analysis'] = analysis_result
-                
-                # Add credibility score
-                result['credibility_score'] = self._calculate_enhanced_credibility_score(
-                    analysis_result, 
-                    confidence
-                )
-                
-            # Add detailed analysis if requested
-            elif detailed:
-                result.update(self._generate_detailed_analysis(text, processed_text, prediction, confidence))
-            
-            # Add model explanations if requested
-            if explain and EXPLAINERS_AVAILABLE and self.explainer:
-                result['model_explanations'] = self._generate_model_explanations(
-                    text,
-                    method=explanation_method,
-                    num_features=num_features
-                )
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error during prediction: {e}", exc_info=True)
-            return {
-                'error': str(e),
-                'prediction': 'Error',
-                'confidence': 0.0,
-                'timestamp': datetime.now().isoformat()
-            }
+        # Process text
+        processed_text = preprocess_text(text)
+        
+        # Vectorize
+        features = self.vectorizer.transform([processed_text])
+        
+        # Predict
+        prediction_proba = self.model.predict_proba(features)[0]
+        prediction_label = 'FAKE' if prediction_proba[1] > 0.5 else 'REAL'
+        confidence = prediction_proba[1] if prediction_label == 'FAKE' else prediction_proba[0]
+        
+        # Create result object
+        result = {
+            "id": item_id,
+            "timestamp": datetime.now().isoformat(),
+            "text": text[:1000],  # Limit to first 1000 chars for storage
+            "processed_text": processed_text,
+            "label": prediction_label,
+            "confidence": float(confidence),
+            "fake_probability": float(prediction_proba[1])
+        }
+        
+        # Add explanation if requested
+        if explain and EXPLAINERS_AVAILABLE:
+            try:
+                if explanation_method.lower() == 'lime':
+                    explanation = generate_lime_explanation(
+                        self.model, self.vectorizer, text, processed_text
+                    )
+                    result["explanation"] = explanation
+                elif explanation_method.lower() == 'shap':
+                    explanation = generate_shap_explanation(
+                        self.model, self.vectorizer, text, processed_text
+                    )
+                    result["explanation"] = explanation
+                else:
+                    result["explanation_error"] = f"Unknown explanation method: {explanation_method}"
+            except Exception as e:
+                result["explanation_error"] = f"Error generating explanation: {str(e)}"
+        
+        # Save to history
+        self._save_to_history(item_id, result)
+        
+        return result
     
-    def _generate_detailed_analysis(self, raw_text, processed_text, prediction, confidence):
+    def enhanced_analysis(self, text: str) -> Dict[str, Any]:
         """
-        Generate detailed analysis of the text.
+        Enhanced analysis with additional features beyond simple prediction
         
         Args:
-            raw_text (str): Original raw text
-            processed_text (str): Preprocessed text
-            prediction (str): Prediction label
-            confidence (float): Prediction confidence
+            text (str): Input text to analyze
             
         Returns:
-            dict: Detailed analysis
+            Dict[str, Any]: Analysis results including prediction and additional features
         """
-        # Extract linguistic features
-        features = extract_features(raw_text)
+        # Get basic prediction first
+        prediction = self.predict(text)
         
-        # Analyze writing style
-        style_analysis = analyze_writing_style(raw_text)
+        if "error" in prediction:
+            return prediction
         
-        # Extract entities
-        entity_info = extract_entities(raw_text)
+        # Add language detection
+        prediction["language"] = detect_language(text)
         
-        # Calculate readability metrics
-        readability = calculate_readability_metrics(raw_text)
+        # Add entity extraction
+        prediction["entities"] = extract_entities(text)
         
-        # Text uniqueness
-        uniqueness = calculate_text_uniqueness(raw_text)
+        # Add readability metrics
+        prediction["readability"] = calculate_readability_metrics(text)
         
-        # Detect propaganda techniques
-        propaganda = detect_propaganda_techniques(raw_text)
+        # Add text uniqueness analysis
+        prediction["uniqueness"] = analyze_text_uniqueness(text)
         
-        # Generate explanation
-        explanation = self._generate_explanation(
-            features, 
-            style_analysis, 
-            propaganda,
-            readability,
-            prediction, 
-            confidence
-        )
+        # Add clickbait detection
+        prediction["clickbait"] = detect_clickbait(text)
         
-        # Return detailed analysis
-        return {
-            'detailed_analysis': {
-                'text_features': features,
-                'writing_style': style_analysis,
-                'entities': entity_info,
-                'readability': readability,
-                'text_uniqueness': uniqueness,
-                'propaganda_analysis': propaganda
+        # Add propaganda techniques detection
+        prediction["propaganda"] = detect_propaganda_techniques(text)
+        
+        # Save enhanced result to history
+        self._save_to_history(prediction["id"], prediction, enhanced=True)
+        
+        return prediction
+    
+    def comprehensive_analysis(self, text: str) -> Dict[str, Any]:
+        """
+        Comprehensive analysis that includes all available metrics
+        
+        Args:
+            text (str): Input text to analyze
+            
+        Returns:
+            Dict[str, Any]: Complete analysis results
+        """
+        # Get basic prediction
+        prediction = self.predict(text)
+        
+        if "error" in prediction:
+            return prediction
+        
+        # Perform comprehensive text analysis
+        text_analysis = comprehensive_text_analysis(text)
+        
+        # Merge results
+        for key, value in text_analysis.items():
+            if key != "error":
+                prediction[key] = value
+        
+        # Save comprehensive result to history
+        self._save_to_history(prediction["id"], prediction, enhanced=True, comprehensive=True)
+        
+        return prediction
+    
+    def _save_to_history(self, item_id: str, data: Dict[str, Any], 
+                         enhanced: bool = False, comprehensive: bool = False) -> None:
+        """Save analysis result to history"""
+        history_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'history')
+        os.makedirs(history_dir, exist_ok=True)
+        
+        try:
+            # Create a filename with type indicator
+            type_indicator = "comprehensive" if comprehensive else "enhanced" if enhanced else "basic"
+            filename = f"{item_id}_{type_indicator}.json"
+            filepath = os.path.join(history_dir, filename)
+            
+            with open(filepath, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving to history: {e}")
+    
+    def get_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        Get analysis history
+        
+        Args:
+            limit (int): Maximum number of items to return
+            
+        Returns:
+            List[Dict[str, Any]]: Recent analysis results
+        """
+        history_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'history')
+        
+        if not os.path.exists(history_dir):
+            return []
+        
+        try:
+            history_files = [os.path.join(history_dir, f) for f in os.listdir(history_dir) 
+                             if f.endswith('.json')]
+            
+            # Sort by modification time, newest first
+            history_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            
+            # Limit number of results
+            history_files = history_files[:limit]
+            
+            # Load history items
+            history = []
+            for file_path in history_files:
+                try:
+                    with open(file_path, 'r') as f:
+                        item = json.load(f)
+                        # Extract ID from filename
+                        item_id = os.path.basename(file_path).split('_')[0]
+                        history.append(item)
+                except Exception as e:
+                    print(f"Error loading history item {file_path}: {e}")
+            
+            return history
+        except Exception as e:
+            print(f"Error retrieving history: {e}")
+            return []
+    
+    def get_history_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific history item by ID
+        
+        Args:
+            item_id (str): The ID of the history item
+            
+        Returns:
+            Optional[Dict[str, Any]]: The history item if found
+        """
+        history_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'history')
+        
+        if not os.path.exists(history_dir):
+            return None
+        
+        try:
+            # Look for any file starting with the item_id
+            matching_files = [os.path.join(history_dir, f) for f in os.listdir(history_dir) 
+                             if f.startswith(f"{item_id}_") and f.endswith('.json')]
+            
+            if not matching_files:
+                return None
+            
+            # Prefer comprehensive > enhanced > basic
+            for type_indicator in ["comprehensive", "enhanced", "basic"]:
+                for file_path in matching_files:
+                    if type_indicator in file_path:
+                        with open(file_path, 'r') as f:
+                            return json.load(f)
+            
+            # If no preferred type found, return the first match
+            with open(matching_files[0], 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error retrieving history item {item_id}: {e}")
+            return None
+    
+    def get_available_explanation_methods(self) -> List[str]:
+        """
+        Get list of available explanation methods
+        
+        Returns:
+            List[str]: List of available explanation method names
+        """
+        if EXPLAINERS_AVAILABLE:
+            return ["lime", "shap"]
+        return []
+    
+    def generate_report(self, item_id: str = None, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Generate a detailed report from analysis data
+        
+        Args:
+            item_id (str, optional): ID of history item to use
+            data (Dict[str, Any], optional): Analysis data to use directly
+            
+        Returns:
+            Dict[str, Any]: Detailed report
+        """
+        if not data and not item_id:
+            return {"error": "Either item_id or data must be provided"}
+        
+        if not data:
+            data = self.get_history_item(item_id)
+            if not data:
+                return {"error": f"History item not found: {item_id}"}
+        
+        # Generate a report ID if none exists
+        report_id = data.get("id", str(uuid.uuid4()))
+        
+        # Create report structure
+        report = {
+            "id": report_id,
+            "generated_at": datetime.now().isoformat(),
+            "analysis_timestamp": data.get("timestamp", "unknown"),
+            "summary": {
+                "verdict": data.get("label", "Unknown"),
+                "confidence": data.get("confidence", 0.0) * 100,
+                "text_length": len(data.get("text", "")),
             },
-            'explanation': explanation,
-            'credibility_score': self._calculate_enhanced_credibility_score({
-                'basic_features': features,
-                'writing_style': style_analysis,
-                'readability': readability,
-                'uniqueness': uniqueness,
-                'propaganda': propaganda,
-                'entities': entity_info
-            }, confidence)
+            "details": {}
         }
-    
-    def _generate_model_explanations(self, text, method="lime", num_features=10):
-        """
-        Generate model explanations using LIME and/or SHAP.
         
-        Args:
-            text (str): Input text
-            method (str): Explanation method ('lime', 'shap', or 'both')
-            num_features (int): Number of features to include
-            
-        Returns:
-            dict: Model explanations
-        """
-        if not EXPLAINERS_AVAILABLE or not self.explainer:
-            return {"error": "Model explanation not available"}
-            
+        # Add language info if available
+        language = data.get("language")
+        if language:
+            report["summary"]["language"] = language.get("language_name", "Unknown")
+            report["details"]["language"] = language
+        
+        # Add readability if available
+        readability = data.get("readability")
+        if readability:
+            report["summary"]["reading_level"] = readability.get("average_grade_level", 0.0)
+            report["details"]["readability"] = readability
+        
+        # Add propaganda score if available
+        propaganda = data.get("propaganda")
+        if propaganda:
+            report["summary"]["propaganda_score"] = propaganda.get("propaganda_score", 0.0)
+            report["details"]["propaganda"] = propaganda
+        
+        # Add clickbait info if available
+        clickbait = data.get("clickbait")
+        if clickbait:
+            report["summary"]["clickbait_score"] = clickbait.get("clickbait_score", 0.0) * 100
+            report["details"]["clickbait"] = clickbait
+        
+        # Save report
+        reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+        os.makedirs(reports_dir, exist_ok=True)
+        
         try:
-            if method.lower() == "lime":
-                return self.explainer.explain_with_lime(text, num_features=num_features)
-            elif method.lower() == "shap":
-                return self.explainer.explain_with_shap(text, num_features=num_features)
-            elif method.lower() == "both":
-                return self.explainer.get_combined_explanation(text, num_features=num_features)
-            else:
-                return {"error": f"Unknown explanation method: {method}"}
+            report_path = os.path.join(reports_dir, f"report_{report_id}.json")
+            with open(report_path, 'w') as f:
+                json.dump(report, f, indent=2)
         except Exception as e:
-            logger.error(f"Error generating model explanation: {e}", exc_info=True)
-            return {"error": str(e)}
-    
-    def _calculate_enhanced_credibility_score(self, analysis_results, model_confidence):
-        """
-        Calculate an enhanced credibility score based on comprehensive analysis.
+            print(f"Error saving report: {e}")
         
-        Args:
-            analysis_results (dict): Results from text analysis
-            model_confidence (float): Model prediction confidence
-            
-        Returns:
-            float: Credibility score (0-100)
-        """
-        # Extract components from analysis results
-        if 'basic_features' in analysis_results:
-            features = analysis_results['basic_features']
-        else:
-            features = {}
-            
-        if 'writing_style' in analysis_results:
-            style = analysis_results['writing_style']
-        else:
-            style = {}
-            
-        if 'readability' in analysis_results:
-            readability = analysis_results['readability']
-        else:
-            readability = {}
-            
-        if 'uniqueness' in analysis_results:
-            uniqueness = analysis_results['uniqueness']
-        else:
-            uniqueness = {}
-            
-        if 'propaganda' in analysis_results:
-            propaganda = analysis_results['propaganda']
-        else:
-            propaganda = {}
-        
-        # Calculate base credibility score (0-100 scale, higher is more credible)
-        base_score = (1 - model_confidence) * 100 if model_confidence <= 0.5 else (1 - model_confidence) * 200
-        
-        # Adjust for clickbait
-        clickbait_penalty = features.get('clickbait_score', 0) * 5
-        
-        # Adjust for subjectivity
-        subjectivity_penalty = features.get('subjectivity', 0) * 10
-        
-        # Adjust for exaggeration phrases
-        exaggeration_penalty = style.get('exaggeration_phrases', 0) * 2
-        
-        # Adjust for propaganda techniques
-        propaganda_penalty = propaganda.get('propaganda_score', 0) * 0.5
-        
-        # Adjust for readability (extremely high or low readability might be suspicious)
-        reading_ease = readability.get('flesch_reading_ease', 50)
-        if reading_ease < 30 or reading_ease > 70:
-            readability_penalty = min(abs(reading_ease - 50) * 0.2, 10)
-        else:
-            readability_penalty = 0
-            
-        # Adjust for text diversity (very high might indicate machine-generated text,
-        # very low might indicate simplified propaganda)
-        lexical_diversity = uniqueness.get('lexical_diversity', 0.5)
-        if lexical_diversity < 0.3 or lexical_diversity > 0.8:
-            diversity_penalty = min(abs(lexical_diversity - 0.5) * 20, 10)
-        else:
-            diversity_penalty = 0
-        
-        # Calculate final score
-        score = base_score - clickbait_penalty - subjectivity_penalty - exaggeration_penalty - propaganda_penalty - readability_penalty - diversity_penalty
-        
-        # Ensure score is in range 0-100
-        score = max(0, min(100, score))
-        
-        return round(score, 1)
-    
-    def _generate_explanation(self, features, style_analysis, propaganda, readability, prediction, confidence):
-        """
-        Generate a human-readable explanation of the analysis.
-        
-        Args:
-            features (dict): Text features
-            style_analysis (dict): Writing style analysis
-            propaganda (dict): Propaganda analysis
-            readability (dict): Readability metrics
-            prediction (str): Prediction label
-            confidence (float): Prediction confidence
-            
-        Returns:
-            str: Human-readable explanation
-        """
-        # Start with prediction
-        if prediction.lower() == 'fake':
-            explanation = f"This text appears to be fake news (confidence: {confidence:.2f}). "
-            credibility = "low"
-        elif prediction.lower() == 'real':
-            explanation = f"This text appears to be real news (confidence: {confidence:.2f}). "
-            credibility = "high"
-        else:
-            explanation = f"The credibility of this text is uncertain (confidence: {confidence:.2f}). "
-            credibility = "medium"
-        
-        # Add details about language features
-        clickbait_score = features.get('clickbait_score', 0)
-        capitalized_ratio = features.get('capitalized_ratio', 0)
-        exclamation_count = features.get('exclamation_count', 0)
-        question_count = features.get('question_count', 0)
-        
-        if clickbait_score > 2:
-            explanation += f"It contains {clickbait_score} clickbait phrases, which is characteristic of sensationalized content. "
-        
-        if capitalized_ratio > 0.1:
-            explanation += f"It has an unusually high proportion of CAPITALIZED words ({capitalized_ratio:.2f}), often used for emphasis in misleading content. "
-        
-        if exclamation_count > 3:
-            explanation += f"The text uses {exclamation_count} exclamation marks, which can indicate emotional manipulation. "
-        
-        # Add details about writing style
-        hedging = style_analysis.get('hedging_phrases', 0)
-        exaggeration = style_analysis.get('exaggeration_phrases', 0)
-        
-        if hedging > 2:
-            explanation += f"It contains {hedging} hedging phrases (like 'allegedly', 'reportedly'), which can indicate uncertainty. "
-        
-        if exaggeration > 2:
-            explanation += f"It uses {exaggeration} exaggeration phrases, which may indicate overstatement of facts. "
-        
-        # Add details about propaganda techniques
-        propaganda_score = propaganda.get('propaganda_score', 0)
-        propaganda_techniques = propaganda.get('techniques', {})
-        
-        if propaganda_score > 20:
-            explanation += f"The text shows strong indicators of propaganda techniques ({propaganda_score:.1f}% score). "
-            top_techniques = sorted(propaganda_techniques.items(), key=lambda x: x[1], reverse=True)[:2]
-            if top_techniques:
-                technique_list = ", ".join([f"{name} ({count})" for name, count in top_techniques])
-                explanation += f"Most common techniques: {technique_list}. "
-        
-        # Add readability assessment
-        reading_ease = readability.get('flesch_reading_ease', 50)
-        grade_level = readability.get('average_grade_level', 10)
-        
-        if reading_ease < 30:
-            explanation += f"The text is very difficult to read (grade level {grade_level:.1f}), which can obscure critical assessment. "
-        elif reading_ease > 70:
-            explanation += f"The text is very easy to read (grade level {grade_level:.1f}), which is common in simplified propaganda. "
-        
-        # Add summary
-        if credibility == "low":
-            explanation += "Overall, this content displays multiple characteristics commonly associated with fake news and should be treated with skepticism."
-        elif credibility == "medium":
-            explanation += "This content shows some concerning characteristics and should be verified with trusted sources."
-        else:
-            explanation += "This content appears to follow journalistic standards, but critical reading is always recommended."
-        
-        return explanation
-        
-    def save_report(self, text, prediction_result, filename=None):
-        """
-        Save analysis report to file.
-        
-        Args:
-            text (str): Original text
-            prediction_result (dict): Prediction results
-            filename (str): Filename to save report
-            
-        Returns:
-            str: Path to saved report
-        """
-        if filename is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"report_{timestamp}.json"
-            
-        report_path = os.path.join(REPORTS_DIR, filename)
-        
-        # Create report data
-        report_data = {
-            'original_text': text,
-            'prediction': prediction_result,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        # Save to file
-        with open(report_path, 'w', encoding='utf-8') as f:
-            json.dump(report_data, f, indent=2, ensure_ascii=False)
-            
-        return report_path
+        return report
+
+# Create a global instance for reuse
+detector = EnhancedFakeNewsDetector()
+
+# Functions to be called by the API
+def predict_fake_news(text: str, explain: bool = False, explanation_method: str = 'lime') -> Dict[str, Any]:
+    """Wrapper function for basic prediction"""
+    return detector.predict(text, explain, explanation_method)
+
+def perform_enhanced_analysis(text: str) -> Dict[str, Any]:
+    """Wrapper function for enhanced analysis"""
+    return detector.enhanced_analysis(text)
+
+def perform_comprehensive_analysis(text: str) -> Dict[str, Any]:
+    """Wrapper function for comprehensive analysis"""
+    return detector.comprehensive_analysis(text)
+
+def get_analysis_history(limit: int = 20) -> List[Dict[str, Any]]:
+    """Wrapper function for getting analysis history"""
+    return detector.get_history(limit)
+
+def get_analysis_item(item_id: str) -> Optional[Dict[str, Any]]:
+    """Wrapper function for getting a specific analysis item"""
+    return detector.get_history_item(item_id)
+
+def get_explanation_methods() -> List[str]:
+    """Wrapper function for getting available explanation methods"""
+    return detector.get_available_explanation_methods()
+
+def generate_analysis_report(item_id: str = None, data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Wrapper function for generating a report"""
+    return detector.generate_report(item_id, data)
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize detector
-    detector = EnhancedFakeNewsDetector()
-    
     # Sample text
     sample_text = """
     SHOCKING DISCOVERY: Scientists find definitive link between vaccines and autism!
